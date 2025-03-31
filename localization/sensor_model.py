@@ -8,6 +8,7 @@ from tf_transformations import euler_from_quaternion
 from nav_msgs.msg import OccupancyGrid
 
 import sys
+import math
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -31,11 +32,11 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0
-        self.alpha_short = 0
-        self.alpha_max = 0
-        self.alpha_rand = 0
-        self.sigma_hit = 0
+        self.alpha_hit = 0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 8.0
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
@@ -86,8 +87,36 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
+        #Range of 10 meters (Assumed)
+        eta = 1
+        d_init = 0
+        d_max = 10
+        z_init = 0
+        z_max = 10
+        # z_k = 0
+        # d = 0
+        p_hit = lambda z_k, d : eta/np.sqrt(2*np.pi*self.sigma_hit^2)* np.exp((-(z_k - d)^2)/(2*self.sigma_hit^2)) if 0 <= z_k <= z_max else 0
+        p_short = lambda z_k, d : 2/d*(1 - z_k/d) if (0 <= z_k <= d and d != 0) else 0
+        p_max = lambda z_k, d : 1 if z_k == z_max else 0
+        p_rand = lambda z_k, d : 1/z_max if 0 <= z_k <= z_max else 0
+        # p = lambda z_k, d : self.alpha_hit * p_hit(z_k, d) + self.alpha_short * p_short(z_k, d) + self.alpha_max*p_max(z_k) + self.alpha_rand*p_rand(z_k,d)
+        # for z in range(self.table_width):
+        #     for d in range(self.table_width):
+        #         self.sensor_model_table[d][z] = p(z/(self.table_width-1)*10,d/(self.table_width-1)*10)
 
-        raise NotImplementedError
+
+        d_vals = np.linspace(d_init, d_max, self.table_width)
+        z_vals = np.linspace(z_init, z_max, self.table_width)
+        for i in range(len(d_vals)):
+            d_vec = np.tile(d_vals[i], (1, self.table_width))
+            p_h = p_hit(z_vals, d_vec)
+            p_h /= np.sum(p_h) #Normalizing p_hit
+            p_s = p_short(z_vals, d_vec)
+            p_m = p_max(z_vals, d_vec)
+            p_r = p_rand(z_vals, d_vec)
+            p = self.alpha_hit * p_h + self.alpha_short * p_s + self.alpha_max*p_m + self.alpha_rand*p_r
+            p /= np.sum(p) #Normalizing column
+            self.sensor_model_table[i, :] = p #If not row vector, get Transpose
 
     def evaluate(self, particles, observation):
         """
@@ -121,7 +150,9 @@ class SensorModel:
         # to perform ray tracing from all the particles.
         # This produces a matrix of size N x num_beams_per_particle 
 
-        scans = self.scan_sim.scan(particles)
+        scans = self.scan_sim.scan(particles) #The ray-tracing done for us
+
+        
 
         ####################################
 

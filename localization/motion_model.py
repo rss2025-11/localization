@@ -1,4 +1,4 @@
-
+import numpy as np
 
 class MotionModel:
 
@@ -31,9 +31,16 @@ class MotionModel:
                 same size
         """
 
+        #For odometry, all time calculations are assumed done in the particle_filter.py
+        #and the odometry data passed in is in the world frame.
+
         ####################################
         # TODO
 
-        raise NotImplementedError
+        #odometry asumed to be an np.array
+        #TODO Add Noise
+        N = odometry.shape[0]
+        tiled_odom = np.tile(odometry, (N,1))
+        return particles + tiled_odom
 
         ####################################
