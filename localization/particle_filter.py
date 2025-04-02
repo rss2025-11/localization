@@ -3,13 +3,14 @@ from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from sensor_msgs.msg import LaserScan
 
 from rclpy.node import Node
 import rclpy
 
 assert rclpy
 
-import nupmy as np
+import numpy as np
 
 
 class ParticleFilter(Node):
@@ -70,6 +71,7 @@ class ParticleFilter(Node):
         ###################
         # State Variables
         self.prev_time = self.get_clock().now()
+        self.pose_estimate = PoseWithCovarianceStamped()
 
         # TODO: FIGURE OUT HOW TO INITIALIZE PARTICLES
 
@@ -107,8 +109,18 @@ class ParticleFilter(Node):
         delta_y = odom_msg.twist.twist.linear.y * delta_time
         delta_angle = odom_msg.twist.twist.angular.z * delta_time
 
-        odom = np.array([delta_x, delta_y, delta_angle])
-        self.particles = self.motion_model.evaluate(self.particles, odom)
+        odom_robot = np.array([delta_x, delta_y, delta_angle])
+
+        # transform odom from robot frame to world frame using current pose estimate
+        theta = self.pose_estimate.pose.pose.orientation.z  # get current orientation
+        R = np.array([
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1]
+        ])
+        odom_world = R @ odom_robot
+
+        self.particles = self.motion_model.evaluate(self.particles, odom_world)
         
         self.prev_time = curr_time
             
