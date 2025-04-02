@@ -41,7 +41,7 @@ class MotionModel:
 
         ####################################
         # odometry asumed to be an np.array
-        N = odometry.shape[0]
+        N = particles.shape[0]
         tiled_odom = np.tile(odometry, (N, 1))
         noise = np.random.normal(self.mu, self.var, (N, 3))
 
