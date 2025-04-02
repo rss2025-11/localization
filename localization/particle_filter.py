@@ -17,6 +17,8 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+from threading import Lock
+
 
 class ParticleFilter(Node):
 
@@ -81,7 +83,9 @@ class ParticleFilter(Node):
         # State Variables
         self.prev_time = self.get_clock().now()
         self.pose_estimate = PoseWithCovarianceStamped()
-
+        self.particles_lock = Lock()
+        self.num_particles = 200
+        self.particles = np.zeros((self.num_particles, 3))
         # TODO: FIGURE OUT HOW TO INITIALIZE PARTICLES
 
     ###################
@@ -100,7 +104,8 @@ class ParticleFilter(Node):
         ranges = laser_msg.ranges
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
-        self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)        
+        with self.particles_lock:
+            self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)        
 
 
     def odom_callback(self, odom_msg):
@@ -125,7 +130,8 @@ class ParticleFilter(Node):
         )
         odom_world = R @ odom_robot
 
-        self.particles = self.motion_model.evaluate(self.particles, odom_world)
+        with self.particles_lock:
+            self.particles = self.motion_model.evaluate(self.particles, odom_world)
 
         self.prev_time = curr_time
 
