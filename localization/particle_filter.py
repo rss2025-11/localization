@@ -86,7 +86,6 @@ class ParticleFilter(Node):
         self.particles_lock = Lock()
         self.num_particles = 200
         self.particles = np.zeros((self.num_particles, 3))
-        # TODO: FIGURE OUT HOW TO INITIALIZE PARTICLES
 
     ###################
 
@@ -99,6 +98,12 @@ class ParticleFilter(Node):
     #
     # Publish a transformation frame between the map
     # and the particle_filter_frame.
+
+    def pose_callback(self, pose_msg):
+        with self.particles_lock:
+            self.particles = np.zeros((self.num_particles, 3))
+            self.particles[:, 0:2] = pose_msg.pose.pose.position.x, pose_msg.pose.pose.position.y
+            self.particles[:, 2] = pose_msg.pose.pose.orientation.z
 
     def laser_callback(self, laser_msg):
         ranges = laser_msg.ranges
