@@ -1,5 +1,4 @@
 import numpy as np
-
 class MotionModel:
 
     def __init__(self, node):
@@ -8,7 +7,11 @@ class MotionModel:
         # Do any precomputation for the motion
         # model here.
 
-        pass
+        # noise params
+        self.mu = 0
+        self.var = 0.1
+
+        # TODO: make the noise params variable on control commands
 
         ####################################
 
@@ -35,12 +38,10 @@ class MotionModel:
         #and the odometry data passed in is in the world frame.
 
         ####################################
-        # TODO
-
         #odometry asumed to be an np.array
-        #TODO Add Noise
         N = odometry.shape[0]
         tiled_odom = np.tile(odometry, (N,1))
-        return particles + tiled_odom
-
+        noise = np.random.normal(self.mu, self.var, (N, 3))
+        # TODO: account for angles having a finite range
+        return particles + tiled_odom + noise
         ####################################
