@@ -92,12 +92,7 @@ class ParticleFilter(Node):
         ranges = laser_msg.ranges
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
-        mask = probabilities > 0.1 # curr arbitrary
-        filtered_particles = self.particles[mask]
-        filtered_probabilities = probabilities[mask]
-
-        # TODO: add noise as drawn
-        self.particles = np.random.choice(filtered_particles, size=len(ranges), replace=True, p=filtered_probabilities)        
+        self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)        
 
 
     def odom_callback(self, odom_msg):
