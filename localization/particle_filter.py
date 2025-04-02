@@ -84,7 +84,8 @@ class ParticleFilter(Node):
         self.prev_time = self.get_clock().now()
         self.pose_estimate = PoseWithCovarianceStamped()
         self.particles_lock = Lock()
-        self.num_particles = 200
+        self.declare_parameter("num_particles", 200)
+        self.num_particles = self.get_parameter("num_particles").get_parameter_value().integer_value
         self.particles = np.zeros((self.num_particles, 3))
 
     ###################
@@ -196,6 +197,8 @@ class ParticleFilter(Node):
         # Publish the new pose estimate
         self.pose_estimate = new_pose_estimate
         self.odom_pub.publish(self.pose_estimate)
+
+        # TODO: Publish transformation for real world
 
     def run_k_means(self, particles):
         """

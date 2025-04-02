@@ -12,11 +12,14 @@ class MotionModel:
         # noise params
         self.mu = 0
         self.var = 0.1
-
+        
         # TODO: make the noise params variable on control commands
-
         ####################################
+        node.declare_parameter("num_particles", 200)
+        node.declare_parameter("deterministic", False)
 
+        self.deterministic = node.get_parameter("deterministic").get_parameter_value().bool_value
+        self.num_particles = node.get_parameter("num_particles").get_parameter_value().integer_value
     def evaluate(self, particles, odometry):
         """
         Update the particles to reflect probable
@@ -45,7 +48,9 @@ class MotionModel:
         tiled_odom = np.tile(odometry, (N, 1))
         noise = np.random.normal(self.mu, self.var, (N, 3))
 
-        updated_particles = particles + tiled_odom + noise
+        updated_particles = particles + tiled_odom 
+        if not self.deterministic:
+            updated_particles = updated_particles + noise
 
         # Normalize angles to [-π, π]
         updated_particles[:, 2] = np.arctan2(
