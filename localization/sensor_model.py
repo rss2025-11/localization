@@ -42,6 +42,19 @@ class SensorModel:
         self.table_width = 201
         ####################################
 
+        ####################################
+        # Adding state variables; can change eta
+        
+        self.eta = 1
+        self.d_init = 0
+        self.d_max = 200
+        self.z_init = 0
+        self.z_max = 200
+        self.d_vals = np.linspace(self.d_init, self.d_max, self.table_width) / self.resolution
+        self.z_vals = np.linspace(self.z_init, self.z_max, self.table_width) / self.resolution
+
+        ####################################
+
         node.get_logger().info("%s" % self.map_topic)
         node.get_logger().info("%s" % self.num_beams_per_particle)
         node.get_logger().info("%s" % self.scan_theta_discretization)
@@ -88,32 +101,27 @@ class SensorModel:
             No return type. Directly modify `self.sensor_model_table`.
         """
         #Range of 10 meters (Assumed)
-        eta = 1
-        d_init = 0
-        d_max = 10
-        z_init = 0
-        z_max = 10
         # z_k = 0
         # d = 0
-        p_hit = lambda z_k, d : eta/np.sqrt(2*np.pi*self.sigma_hit^2)* np.exp((-(z_k - d)^2)/(2*self.sigma_hit^2)) if 0 <= z_k <= z_max else 0
+        p_hit = lambda z_k, d : self.eta/np.sqrt(2*np.pi*self.sigma_hit^2)* np.exp((-(z_k - d)^2)/(2*self.sigma_hit^2)) if 0 <= z_k <= self.z_max else 0
         p_short = lambda z_k, d : 2/d*(1 - z_k/d) if (0 <= z_k <= d and d != 0) else 0
-        p_max = lambda z_k, d : 1 if z_k == z_max else 0
-        p_rand = lambda z_k, d : 1/z_max if 0 <= z_k <= z_max else 0
+        p_max = lambda z_k, d : 1 if z_k == self.z_max else 0
+        p_rand = lambda z_k, d : 1/self.z_max if 0 <= z_k <= self.z_max else 0
         # p = lambda z_k, d : self.alpha_hit * p_hit(z_k, d) + self.alpha_short * p_short(z_k, d) + self.alpha_max*p_max(z_k) + self.alpha_rand*p_rand(z_k,d)
         # for z in range(self.table_width):
         #     for d in range(self.table_width):
         #         self.sensor_model_table[d][z] = p(z/(self.table_width-1)*10,d/(self.table_width-1)*10)
 
 
-        d_vals = np.linspace(d_init, d_max, self.table_width)
-        z_vals = np.linspace(z_init, z_max, self.table_width)
-        for i in range(len(d_vals)):
-            d_vec = np.tile(d_vals[i], (1, self.table_width))
-            p_h = p_hit(z_vals, d_vec)
+        # d_vals = np.linspace(self.d_init, self.d_max, self.table_width) / self.resolution
+        # z_vals = np.linspace(self.z_init, self.z_max, self.table_width) / self.resolution
+        for i in range(len(self.d_vals)):
+            d_vec = np.tile(self.d_vals[i], (1, self.table_width))
+            p_h = p_hit(self.z_vals, d_vec)
             p_h /= np.sum(p_h) #Normalizing p_hit
-            p_s = p_short(z_vals, d_vec)
-            p_m = p_max(z_vals, d_vec)
-            p_r = p_rand(z_vals, d_vec)
+            p_s = p_short(self.z_vals, d_vec)
+            p_m = p_max(self.z_vals, d_vec)
+            p_r = p_rand(self.z_vals, d_vec)
             p = self.alpha_hit * p_h + self.alpha_short * p_s + self.alpha_max*p_m + self.alpha_rand*p_r
             p /= np.sum(p) #Normalizing column
             self.sensor_model_table[i, :] = p #If not row vector, get Transpose
@@ -127,7 +135,7 @@ class SensorModel:
             particles: An Nx3 matrix of the form:
 
                 [x0 y0 theta0]
-                [x1 y0 theta1]
+                [x1 y1 theta1]
                 [    ...     ]
 
             observation: A vector of lidar data measured
@@ -150,9 +158,34 @@ class SensorModel:
         # to perform ray tracing from all the particles.
         # This produces a matrix of size N x num_beams_per_particle 
 
+        # simulation is ground truth; d
+        # what car is seeing; array of all distances
         scans = self.scan_sim.scan(particles) #The ray-tracing done for us
+        scans /= (self.resolution * self.lidar_scale_to_map_scale) # convert scan results from meters to pixels
+        clipped_scans = np.clip(scans, 0, self.z_max / (self.resolution * self.lidar_scale_to_map_scale)) # convert scan results from meters to pixels
 
+
+        # simulated scans given a particle; z_k
+        observation /= (self.resolution * self.lidar_scale_to_map_scale) # convert observation results from meters to pixels
+        clipped_observation = np.clip(observation, 0, self.z_max / (self.resolution * self.lidar_scale_to_map_scale))
+
+        # for each particle, we are determining how likely the observation is based on the scan
+        probabilities = np.empty(len(particles))
+
+
+        for i in range(len(clipped_scans)):
+            # find probability of observation given particle_scan
+            particle_scan = clipped_scans[i]
+            p = 1
+            for j in range(len(particle_scan)):
+                ray_truth = particle_scan[j]
+                d_index = (np.abs(self.d_vals - ray_truth)).argmin()
+                z_index= (np.abs(self.z_vals - clipped_observation[j])).argmin()
+                p *= self.sensor_model_table[z_index][d_index]
+
+            probabilities[j] = p
         
+        return probabilities
 
         ####################################
 
@@ -161,7 +194,7 @@ class SensorModel:
         self.map = np.array(map_msg.data, np.double) / 100.
         self.map = np.clip(self.map, 0, 1)
 
-        self.resolution = map_msg.info.resolution
+        self.resolution = map_msg.info.resolution # number pixels per meter
 
         # Convert the origin to a tuple
         origin_p = map_msg.info.origin.position
