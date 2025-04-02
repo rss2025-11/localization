@@ -1,4 +1,6 @@
 import numpy as np
+
+
 class MotionModel:
 
     def __init__(self, node):
@@ -34,14 +36,21 @@ class MotionModel:
                 same size
         """
 
-        #For odometry, all time calculations are assumed done in the particle_filter.py
-        #and the odometry data passed in is in the world frame.
+        # For odometry, all time calculations are assumed done in the particle_filter.py
+        # and the odometry data passed in is in the world frame.
 
         ####################################
-        #odometry asumed to be an np.array
+        # odometry asumed to be an np.array
         N = odometry.shape[0]
-        tiled_odom = np.tile(odometry, (N,1))
+        tiled_odom = np.tile(odometry, (N, 1))
         noise = np.random.normal(self.mu, self.var, (N, 3))
-        # TODO: account for angles having a finite range
-        return particles + tiled_odom + noise
+
+        updated_particles = particles + tiled_odom + noise
+
+        # Normalize angles to [-π, π]
+        updated_particles[:, 2] = np.arctan2(
+            np.sin(updated_particles[:, 2]), np.cos(updated_particles[:, 2])
+        )
+
+        return updated_particles
         ####################################
