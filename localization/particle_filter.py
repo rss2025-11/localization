@@ -116,7 +116,9 @@ class ParticleFilter(Node):
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
         with self.particles_lock:
-            self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)        
+            # self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)    
+            indices = np.random.choice(self.particles.shape[0], size=self.particles.shape[0], replace=True, p=probabilities)
+            self.particles = self.particles[indices]
 
 
     def odom_callback(self, odom_msg):
