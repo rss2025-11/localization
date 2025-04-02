@@ -101,9 +101,14 @@ class ParticleFilter(Node):
 
     def pose_callback(self, pose_msg):
         with self.particles_lock:
-            self.particles = np.zeros((self.num_particles, 3))
-            self.particles[:, 0:2] = pose_msg.pose.pose.position.x, pose_msg.pose.pose.position.y
-            self.particles[:, 2] = pose_msg.pose.pose.orientation.z
+            x = pose_msg.pose.position.x
+            y = pose_msg.pose.position.y
+            theta = 0
+            variance = 1
+            position_noise = np.random.normal(0, variance, (self.num_particles, 2))
+            heading_noise = np.random.uniform(0, 2*np.pi, (self.num_particles, 1))
+            pose_matrix = np.stack([[x, y, theta] for _ in range(self.num_particles)])
+            self.particles = pose_matrix + np.hstack(position_noise, heading_noise)
 
     def laser_callback(self, laser_msg):
         ranges = laser_msg.ranges
