@@ -9,6 +9,8 @@ import rclpy
 
 assert rclpy
 
+import nupmy as np
+
 
 class ParticleFilter(Node):
 
@@ -65,15 +67,52 @@ class ParticleFilter(Node):
 
         self.get_logger().info("=============+READY+=============")
 
-        # Implement the MCL algorithm
-        # using the sensor model and the motion model
-        #
-        # Make sure you include some way to initialize
-        # your particles, ideally with some sort
-        # of interactive interface in rviz
-        #
-        # Publish a transformation frame between the map
-        # and the particle_filter_frame.
+        ###################
+        # State Variables
+        self.prev_time = self.get_clock().now()
+
+        # TODO: FIGURE OUT HOW TO INITIALIZE PARTICLES
+
+
+    ###################
+
+    # Implement the MCL algorithm
+    # using the sensor model and the motion model
+    #
+    # Make sure you include some way to initialize
+    # your particles, ideally with some sort
+    # of interactive interface in rviz
+    #
+    # Publish a transformation frame between the map
+    # and the particle_filter_frame.
+
+    def laser_callback(self, laser_msg):
+        ranges = laser_msg.ranges
+        probabilities = self.sensor_model.evaluate(self.particles, ranges)
+
+        mask = probabilities > 0.1 # curr arbitrary
+        filtered_particles = self.particles[mask]
+        filtered_probabilities = probabilities[mask]
+
+        # TODO: add noise as drawn
+        self.particles = np.random.choice(filtered_particles, size=len(ranges), replace=True, p=filtered_probabilities)        
+
+
+    def odom_callback(self, odom_msg):
+        
+        curr_time = self.get_clock().now()
+        delta_time = curr_time - self.prev_time
+
+        delta_x = odom_msg.twist.twist.linear.x * delta_time
+        delta_y = odom_msg.twist.twist.linear.y * delta_time
+        delta_angle = odom_msg.twist.twist.angular.z * delta_time
+
+        odom = np.array([delta_x, delta_y, delta_angle])
+        self.particles = self.motion_model.evaluate(self.particles, odom)
+        
+        self.prev_time = curr_time
+            
+
 
 
 def main(args=None):
