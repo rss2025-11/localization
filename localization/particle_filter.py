@@ -84,7 +84,9 @@ class ParticleFilter(Node):
         self.prev_time = self.get_clock().now()
         self.particles_lock = Lock()
         self.declare_parameter("num_particles", 200)
-        self.num_particles = self.get_parameter("num_particles").get_parameter_value().integer_value
+        self.num_particles = (
+            self.get_parameter("num_particles").get_parameter_value().integer_value
+        )
         self.particles = np.zeros((self.num_particles, 3))
 
     ###################
@@ -106,7 +108,7 @@ class ParticleFilter(Node):
             theta = 0
             variance = 1
             position_noise = np.random.normal(0, variance, (self.num_particles, 2))
-            heading_noise = np.random.uniform(0, 2*np.pi, (self.num_particles, 1))
+            heading_noise = np.random.uniform(0, 2 * np.pi, (self.num_particles, 1))
             pose_matrix = np.stack([[x, y, theta] for _ in range(self.num_particles)])
             self.particles = pose_matrix + np.hstack(position_noise, heading_noise)
 
@@ -115,10 +117,18 @@ class ParticleFilter(Node):
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
         with self.particles_lock:
-            # self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)    
-            indices = np.random.choice(self.particles.shape[0], size=self.particles.shape[0], replace=True, p=probabilities)
+            # self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)
+            indices = np.random.choice(
+                self.particles.shape[0],
+                size=self.particles.shape[0],
+                replace=True,
+                p=probabilities,
+            )
             self.particles = self.particles[indices]
 
+        particles_copy = self.particles.copy()
+        self.viz_particles(particles_copy)
+        self.update_pose_estimate(particles_copy)
 
     def odom_callback(self, odom_msg):
 
@@ -136,7 +146,9 @@ class ParticleFilter(Node):
 
         self.prev_time = curr_time
 
-        self.update_pose_estimate()
+        particles_copy = self.particles.copy()
+        self.viz_particles(particles_copy)
+        self.update_pose_estimate(particles_copy)
 
     def update_pose_estimate(self, particles_copy):
         """
@@ -186,6 +198,7 @@ class ParticleFilter(Node):
 
         # Publish the new pose estimate
         self.odom_pub.publish(new_pose_estimate)
+        self.viz_pose_estimate(new_pose_estimate)
 
         # TODO: Publish transformation for real world
 
@@ -239,6 +252,14 @@ class ParticleFilter(Node):
         mean_theta = np.arctan2(center[3], center[2])
 
         return mean_x, mean_y, mean_theta
+
+    def viz_particles(self, particles):
+        # Create a marker for each particle
+        pass
+
+    def viz_pose_estimate(self, pose_estimate):
+        # Create a marker for the pose estimate
+        pass
 
 
 def main(args=None):
