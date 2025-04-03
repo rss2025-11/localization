@@ -82,7 +82,6 @@ class ParticleFilter(Node):
         ###################
         # State Variables
         self.prev_time = self.get_clock().now()
-        self.pose_estimate = PoseWithCovarianceStamped()
         self.particles_lock = Lock()
         self.declare_parameter("num_particles", 200)
         self.num_particles = self.get_parameter("num_particles").get_parameter_value().integer_value
@@ -132,19 +131,8 @@ class ParticleFilter(Node):
 
         odom_robot = np.array([delta_x, delta_y, delta_angle])
 
-        # transform odom from robot frame to world frame using current pose estimate
-        theta = self.pose_estimate.pose.pose.orientation.z  # get current orientation
-        R = np.array(
-            [
-                [np.cos(theta), -np.sin(theta), 0],
-                [np.sin(theta), np.cos(theta), 0],
-                [0, 0, 1],
-            ]
-        )
-        odom_world = R @ odom_robot
-
         with self.particles_lock:
-            self.particles = self.motion_model.evaluate(self.particles, odom_world)
+            self.particles = self.motion_model.evaluate(self.particles, odom_robot)
 
         self.prev_time = curr_time
 
@@ -197,8 +185,7 @@ class ParticleFilter(Node):
         new_pose_estimate.pose.covariance = cov.flatten().tolist()
 
         # Publish the new pose estimate
-        self.pose_estimate = new_pose_estimate
-        self.odom_pub.publish(self.pose_estimate)
+        self.odom_pub.publish(new_pose_estimate)
 
         # TODO: Publish transformation for real world
 
