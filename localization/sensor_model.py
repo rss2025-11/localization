@@ -50,9 +50,9 @@ class SensorModel:
         self.d_max = 200
         self.z_init = 0
         self.z_max = 200
-        self.d_vals = np.linspace(self.d_init, self.d_max, self.table_width) / self.resolution
-        self.z_vals = np.linspace(self.z_init, self.z_max, self.table_width) / self.resolution
 
+        self.d_vals = np.linspace(0, self.table_width-1, self.table_width)
+        self.z_vals = np.linspace(0, self.table_width-1, self.table_width)
         ####################################
 
         node.get_logger().info("%s" % self.map_topic)
@@ -60,9 +60,7 @@ class SensorModel:
         node.get_logger().info("%s" % self.scan_theta_discretization)
         node.get_logger().info("%s" % self.scan_field_of_view)
 
-        # Precompute the sensor model table
-        self.sensor_model_table = np.empty((self.table_width, self.table_width))
-        self.precompute_sensor_model()
+
 
         # Create a simulated laser scan
         self.scan_sim = PyScanSimulator2D(
@@ -81,6 +79,9 @@ class SensorModel:
             self.map_callback,
             1)
 
+        # Precompute the sensor model table
+        self.sensor_model_table = np.empty((self.table_width, self.table_width))
+        self.precompute_sensor_model()
     def precompute_sensor_model(self):
         """
         Generate and store a table which represents the sensor model.
@@ -100,21 +101,13 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        #Range of 10 meters (Assumed)
-        # z_k = 0
-        # d = 0
-        p_hit = lambda z_k, d : self.eta/np.sqrt(2*np.pi*self.sigma_hit^2)* np.exp((-(z_k - d)^2)/(2*self.sigma_hit^2)) if 0 <= z_k <= self.z_max else 0
-        p_short = lambda z_k, d : 2/d*(1 - z_k/d) if (0 <= z_k <= d and d != 0) else 0
-        p_max = lambda z_k, d : 1 if z_k == self.z_max else 0
-        p_rand = lambda z_k, d : 1/self.z_max if 0 <= z_k <= self.z_max else 0
-        # p = lambda z_k, d : self.alpha_hit * p_hit(z_k, d) + self.alpha_short * p_short(z_k, d) + self.alpha_max*p_max(z_k) + self.alpha_rand*p_rand(z_k,d)
-        # for z in range(self.table_width):
-        #     for d in range(self.table_width):
-        #         self.sensor_model_table[d][z] = p(z/(self.table_width-1)*10,d/(self.table_width-1)*10)
 
 
-        # d_vals = np.linspace(self.d_init, self.d_max, self.table_width) / self.resolution
-        # z_vals = np.linspace(self.z_init, self.z_max, self.table_width) / self.resolution
+        p_hit = lambda z_k, d : self.eta/np.sqrt(2*np.pi*self.sigma_hit**2)* np.exp((-(z_k - d)**2)/(2*self.sigma_hit**2)) if np.all((0<=z_k) & (z_k<=self.z_max)) else 0
+        p_short = lambda z_k, d : 2/d*(1 - z_k/d) if np.all((0 <= z_k) & (z_k <= d) & (d != 0)) else 0
+        p_max = lambda z_k, d : 1 if np.all(z_k == self.z_max) else 0
+        p_rand = lambda z_k, d : 1/self.z_max if np.all((0<=z_k) & (z_k <= self.z_max)) else 0
+
         for i in range(len(self.d_vals)):
             d_vec = np.tile(self.d_vals[i], (1, self.table_width))
             p_h = p_hit(self.z_vals, d_vec)
@@ -162,26 +155,30 @@ class SensorModel:
         # what car is seeing; array of all distances
         scans = self.scan_sim.scan(particles) #The ray-tracing done for us
         scans /= (self.resolution * self.lidar_scale_to_map_scale) # convert scan results from meters to pixels
-        clipped_scans = np.clip(scans, 0, self.z_max / (self.resolution * self.lidar_scale_to_map_scale)) # convert scan results from meters to pixels
+        # z_max is defined in pixels
+        clipped_scans = np.clip(scans, 0, self.z_max) # convert scan results from meters to pixels
 
 
         # simulated scans given a particle; z_k
         observation /= (self.resolution * self.lidar_scale_to_map_scale) # convert observation results from meters to pixels
-        clipped_observation = np.clip(observation, 0, self.z_max / (self.resolution * self.lidar_scale_to_map_scale))
+        clipped_observation = np.clip(observation, 0, self.z_max)
 
         # for each particle, we are determining how likely the observation is based on the scan
         probabilities = np.empty(len(particles))
 
-
+        print("Made to line 169")
         for i in range(len(clipped_scans)):
             # find probability of observation given particle_scan
             particle_scan = clipped_scans[i]
+            print("Made to line 173")
             p = 1
             for j in range(len(particle_scan)):
                 ray_truth = particle_scan[j]
                 d_index = (np.abs(self.d_vals - ray_truth)).argmin()
                 z_index= (np.abs(self.z_vals - clipped_observation[j])).argmin()
                 p *= self.sensor_model_table[z_index][d_index]
+                print("Made to line 180")
+
 
             probabilities[j] = p
         
