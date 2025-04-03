@@ -44,18 +44,33 @@ class MotionModel:
 
         ####################################
         # odometry asumed to be an np.array
-        N = particles.shape[0]
-        tiled_odom = np.tile(odometry, (N, 1))
-        noise = np.random.normal(self.mu, self.var, (N, 3))
 
-        updated_particles = particles + tiled_odom 
-        if not self.deterministic:
-            updated_particles = updated_particles + noise
+        # transform odom from robot frame to world frame using current pose estimate
 
-        # Normalize angles to [-π, π]
-        updated_particles[:, 2] = np.arctan2(
-            np.sin(updated_particles[:, 2]), np.cos(updated_particles[:, 2])
+        x_particles = particles[:, 0]
+        y_particles = particles[:, 1]
+        thetas = particles[:, 2]
+
+        # Create rotation matrices for each particle's theta
+        cos_thetas = np.cos(thetas)
+        sin_thetas = np.sin(thetas)
+
+        # Rotate odometry translation
+        dx_world = cos_thetas * odometry[0] - sin_thetas * odometry[1]
+        dy_world = sin_thetas * odometry[0] + cos_thetas * odometry[1]
+
+        # Compute new positions
+        x_world = x_particles + dx_world
+        y_world = y_particles + dy_world
+        theta_world = thetas + odometry[2]
+
+        # Clip angles to [-π, π]
+        theta_world = np.arctan2(
+            np.sin(theta_world), np.cos(theta_world)
         )
 
+        # Stack results to get the new particles in world coordinates
+        updated_particles = np.column_stack((x_world, y_world, theta_world))
+    
         return updated_particles
         ####################################
