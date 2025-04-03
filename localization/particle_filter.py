@@ -19,6 +19,9 @@ from sklearn.preprocessing import StandardScaler
 
 from threading import Lock
 
+from visualization_msgs.msg import Marker, MarkerArray
+from tf_transformations import quaternion_from_euler
+
 
 class ParticleFilter(Node):
 
@@ -88,6 +91,9 @@ class ParticleFilter(Node):
             self.get_parameter("num_particles").get_parameter_value().integer_value
         )
         self.particles = np.zeros((self.num_particles, 3))
+
+        self.viz_particle_pub = self.create_publisher(MarkerArray, "/viz/particles", 1)
+        self.viz_pose_pub = self.create_publisher(Marker, "/viz/pose_estimate", 1)
 
     ###################
 
@@ -255,11 +261,72 @@ class ParticleFilter(Node):
 
     def viz_particles(self, particles):
         # Create a marker for each particle
-        pass
+        marker_array = MarkerArray()
+
+        for i, particle in enumerate(particles):
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.id = i
+            marker.type = Marker.ARROW
+            marker.action = Marker.ADD
+
+            # Set particle position
+            marker.pose.position.x = particle[0]
+            marker.pose.position.y = particle[1]
+            marker.pose.position.z = 0.0
+
+            # Set particle orientation
+            q = quaternion_from_euler(0, 0, particle[2])
+            marker.pose.orientation.x = q[0]
+            marker.pose.orientation.y = q[1]
+            marker.pose.orientation.z = q[2]
+            marker.pose.orientation.w = q[3]
+
+            # Set marker properties
+            marker.scale.x = 0.1  # Arrow length
+            marker.scale.y = 0.05  # Arrow width
+            marker.scale.z = 0.05  # Arrow height
+            marker.color.a = 0.3  # Semi-transparent
+            marker.color.r = 0.0
+            marker.color.g = 1.0
+            marker.color.b = 0.0
+
+            marker_array.markers.append(marker)
+
+        self.viz_particle_pub.publish(marker_array)
 
     def viz_pose_estimate(self, pose_estimate):
         # Create a marker for the pose estimate
-        pass
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.id = 0
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+
+        # Set pose estimate position
+        marker.pose.position.x = pose_estimate[0]
+        marker.pose.position.y = pose_estimate[1]
+        marker.pose.position.z = 0.0
+
+        # Set pose estimate orientation
+        q = quaternion_from_euler(0, 0, pose_estimate[2])
+        marker.pose.orientation.x = q[0]
+        marker.pose.orientation.y = q[1]
+        marker.pose.orientation.z = q[2]
+        marker.pose.orientation.w = q[3]
+
+        # Set marker properties
+        marker.scale.x = 0.2  # Arrow length
+        marker.scale.y = 0.1  # Arrow width
+        marker.scale.z = 0.1  # Arrow height
+        marker.color.a = 1.0  # Fully opaque
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+
+        self.viz_pose_pub.publish(marker)
 
 
 def main(args=None):
