@@ -20,6 +20,7 @@ class MotionModel:
 
         self.deterministic = node.get_parameter("deterministic").get_parameter_value().bool_value
         self.num_particles = node.get_parameter("num_particles").get_parameter_value().integer_value
+        
     def evaluate(self, particles, odometry):
         """
         Update the particles to reflect probable
@@ -71,6 +72,18 @@ class MotionModel:
 
         # Stack results to get the new particles in world coordinates
         updated_particles = np.column_stack((x_world, y_world, theta_world))
+
+        if not self.deterministic:
+            # Add noise
+            N = particles.shape[0]
+            noise = np.random.normal(self.mu, np.sqrt(self.var), (N, 3))
+            updated_particles += noise
+            
+            # Renormalize angles after adding noise
+            updated_particles[:, 2] = np.arctan2(
+                np.sin(updated_particles[:, 2]), 
+                np.cos(updated_particles[:, 2])
+            )
     
         return updated_particles
         ####################################
