@@ -10,8 +10,6 @@ import rclpy
 
 assert rclpy
 
-import tf
-
 import numpy as np
 
 from sklearn.cluster import KMeans
@@ -21,6 +19,9 @@ from threading import Lock
 
 from visualization_msgs.msg import Marker, MarkerArray
 from tf_transformations import quaternion_from_euler
+
+# from tf2_ros import TransformBroadcaster
+# from geometry_msgs.msg import TransformStamped
 
 
 class ParticleFilter(Node):
@@ -76,6 +77,11 @@ class ParticleFilter(Node):
 
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
 
+        self.declare_parameter("num_particles", 200)
+        self.num_particles = (
+            self.get_parameter("num_particles").get_parameter_value().integer_value
+        )
+
         # Initialize the models
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
@@ -86,10 +92,6 @@ class ParticleFilter(Node):
         # State Variables
         self.prev_time = self.get_clock().now()
         self.particles_lock = Lock()
-        self.declare_parameter("num_particles", 200)
-        self.num_particles = (
-            self.get_parameter("num_particles").get_parameter_value().integer_value
-        )
         self.particles = np.zeros((self.num_particles, 3))
 
         self.viz_particle_pub = self.create_publisher(MarkerArray, "/viz/particles", 1)
@@ -109,21 +111,21 @@ class ParticleFilter(Node):
 
     def pose_callback(self, pose_msg):
         with self.particles_lock:
-            x = pose_msg.pose.position.x
-            y = pose_msg.pose.position.y
+            x = pose_msg.pose.pose.position.x
+            y = pose_msg.pose.pose.position.y
             theta = 0
             variance = 1
             position_noise = np.random.normal(0, variance, (self.num_particles, 2))
             heading_noise = np.random.uniform(0, 2 * np.pi, (self.num_particles, 1))
             pose_matrix = np.stack([[x, y, theta] for _ in range(self.num_particles)])
-            self.particles = pose_matrix + np.hstack(position_noise, heading_noise)
+            self.particles = pose_matrix + np.hstack((position_noise, heading_noise))
 
     def laser_callback(self, laser_msg):
-        ranges = laser_msg.ranges
+        # Convert ranges from array.array to numpy array
+        ranges = np.array(laser_msg.ranges)
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
         with self.particles_lock:
-            # self.particles = np.random.choice(self.particles, size=self.particles.size, replace=True, p=probabilities)
             indices = np.random.choice(
                 self.particles.shape[0],
                 size=self.particles.shape[0],
@@ -140,6 +142,7 @@ class ParticleFilter(Node):
 
         curr_time = self.get_clock().now()
         delta_time = curr_time - self.prev_time
+        delta_time = delta_time.nanoseconds / 1e9
 
         delta_x = odom_msg.twist.twist.linear.x * delta_time
         delta_y = odom_msg.twist.twist.linear.y * delta_time
@@ -173,17 +176,19 @@ class ParticleFilter(Node):
 
         mean_x, mean_y, mean_theta = self.run_k_means(particles_copy)
 
-        # Create pose estimate message
-        new_pose_estimate = PoseWithCovarianceStamped()
-        new_pose_estimate.header.stamp = self.get_clock().now()
+        # Create odometry message instead of PoseWithCovarianceStamped
+        new_pose_estimate = Odometry()
+        new_pose_estimate.header.stamp = self.get_clock().now().to_msg()
         new_pose_estimate.header.frame_id = "map"
+        new_pose_estimate.child_frame_id = self.particle_filter_frame
 
         # Set position
         new_pose_estimate.pose.pose.position.x = mean_x
         new_pose_estimate.pose.pose.position.y = mean_y
+        new_pose_estimate.pose.pose.position.z = 0.0
 
         # Convert angle to quaternion
-        q = tf.transformations.quaternion_from_euler(0, 0, mean_theta)
+        q = quaternion_from_euler(0, 0, mean_theta)
         new_pose_estimate.pose.pose.orientation.x = q[0]
         new_pose_estimate.pose.pose.orientation.y = q[1]
         new_pose_estimate.pose.pose.orientation.z = q[2]
@@ -202,9 +207,18 @@ class ParticleFilter(Node):
 
         new_pose_estimate.pose.covariance = cov.flatten().tolist()
 
+        # Set twist to zero since we don't compute it
+        new_pose_estimate.twist.twist.linear.x = 0.0
+        new_pose_estimate.twist.twist.linear.y = 0.0
+        new_pose_estimate.twist.twist.linear.z = 0.0
+        new_pose_estimate.twist.twist.angular.x = 0.0
+        new_pose_estimate.twist.twist.angular.y = 0.0
+        new_pose_estimate.twist.twist.angular.z = 0.0
+        new_pose_estimate.twist.covariance = [0.0] * 36  # 6x6 covariance matrix
+
         # Publish the new pose estimate
         self.odom_pub.publish(new_pose_estimate)
-        self.viz_pose_estimate(new_pose_estimate)
+        self.viz_pose_estimate([mean_x, mean_y, mean_theta])
 
         # TODO: Publish transformation for real world
 
@@ -252,7 +266,12 @@ class ParticleFilter(Node):
         largest_cluster = np.argmax(np.bincount(labels))
 
         # Transform cluster center back to original scale
-        center = scaler.inverse_transform(best_kmeans.cluster_centers_[largest_cluster])
+        # Reshape the 1D array to a 2D array with shape (1, n_features)
+        center = scaler.inverse_transform(
+            best_kmeans.cluster_centers_[largest_cluster].reshape(1, -1)
+        )
+        # Since inverse_transform returns a 2D array, we need to flatten it back to 1D
+        center = center.flatten()
         mean_x = center[0]
         mean_y = center[1]
         mean_theta = np.arctan2(center[3], center[2])

@@ -196,6 +196,7 @@ class SensorModel:
         """
 
         if not self.map_set:
+            self.node.get_logger().info("Map not set")
             return
 
         ####################################
@@ -231,6 +232,9 @@ class SensorModel:
                 z_index= (np.abs(self.z_vals - clipped_observation[j])).argmin()
                 p *= self.sensor_model_table[z_index][d_index]
             probabilities[i] = p
+
+        # normalize probabilities
+        probabilities /= np.sum(probabilities)
         
         return probabilities
 
