@@ -13,29 +13,16 @@ import math
 np.set_printoptions(threshold=sys.maxsize)
 
 
+
 class SensorModel:
 
-    def __init__(self, node):
-        node.declare_parameter('map_topic', "default")
-        node.declare_parameter('num_beams_per_particle', 1)
-        node.declare_parameter('scan_theta_discretization', 1.0)
-        node.declare_parameter('scan_field_of_view', 1.0)
-        node.declare_parameter('lidar_scale_to_map_scale', 1.0)
-
-        self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
-        self.num_beams_per_particle = node.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
-        self.scan_theta_discretization = node.get_parameter(
-            'scan_theta_discretization').get_parameter_value().double_value
-        self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
-        self.lidar_scale_to_map_scale = node.get_parameter(
-            'lidar_scale_to_map_scale').get_parameter_value().double_value
-
+    def __init__(self, node=None):
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0.74
-        self.alpha_short = 0.07
-        self.alpha_max = 0.07
-        self.alpha_rand = 0.12
+        self.alpha_hit =1.0 # 0.74
+        self.alpha_short = 0.0# 0.07
+        self.alpha_max = 0.0#0.07
+        self.alpha_rand = 0.0#0.12
         self.sigma_hit = 8.0
 
         # Your sensor table will be a `table_width` x `table_width` np array:
@@ -53,7 +40,26 @@ class SensorModel:
 
         self.d_vals = np.linspace(0, self.table_width-1, self.table_width)
         self.z_vals = np.linspace(0, self.table_width-1, self.table_width)
+
+        self.sensor_model_table = np.empty((self.table_width, self.table_width))
+        self.precompute_sensor_model()
+        self.debug = self.sensor_model_table[0]
         ####################################
+        return
+        node.declare_parameter('map_topic', "default")
+        node.declare_parameter('num_beams_per_particle', 1)
+        node.declare_parameter('scan_theta_discretization', 1.0)
+        node.declare_parameter('scan_field_of_view', 1.0)
+        node.declare_parameter('lidar_scale_to_map_scale', 1.0)
+
+        self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
+        self.num_beams_per_particle = node.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
+        self.scan_theta_discretization = node.get_parameter(
+            'scan_theta_discretization').get_parameter_value().double_value
+        self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
+        self.lidar_scale_to_map_scale = node.get_parameter(
+            'lidar_scale_to_map_scale').get_parameter_value().double_value
+
 
         node.get_logger().info("%s" % self.map_topic)
         node.get_logger().info("%s" % self.num_beams_per_particle)
@@ -82,11 +88,39 @@ class SensorModel:
         # Precompute the sensor model table
         self.sensor_model_table = np.empty((self.table_width, self.table_width))
         self.precompute_sensor_model()
+
+    def find_prob_hit(self, z_k, d):
+        mask = (0 <= z_k) & (z_k <= self.z_max)
+        return np.where(
+            mask,
+            self.eta
+            / np.sqrt(2 * np.pi * self.sigma_hit**2)
+            * np.exp((-((z_k - d) ** 2)) / (2 * self.sigma_hit**2)),
+            0,
+        )
+
+    def find_prob_short(self, z_k, d):
+        mask = (0 <= z_k) & (z_k <= d) & (d != 0)
+        # TODO: might be doing too much
+        safe_div = lambda x, y: np.divide(
+            x, y, where=y != 0, out=np.zeros(y.shape, dtype=np.float64)
+        )
+        return np.where(mask, 2 * (safe_div(1, d) - safe_div(z_k, d * d)), 0)
+    
+    def find_prob_max(self, z_k, d):
+        mask = z_k == self.z_max
+        return np.where(mask, 1, 0)
+
+    def find_prob_rand(self, z_k, d):
+        mask = (0 <= z_k) & (z_k <= self.z_max)
+        return np.where(mask, 1 / self.z_max, 0)
+    
+
     def precompute_sensor_model(self):
         """
         Generate and store a table which represents the sensor model.
 
-        For each discrete computed range value, this provides the probability of 
+        For each discrete computed range value, this provides the probability of
         measuring any (discrete) range. This table is indexed by the sensor model
         at runtime by discretizing the measurements and computed ranges from
         RangeLibc.
@@ -102,22 +136,45 @@ class SensorModel:
             No return type. Directly modify `self.sensor_model_table`.
         """
 
+        # Initialize tables
+        hit_table = np.zeros((self.table_width, self.table_width))
+        other_table = np.zeros((self.table_width, self.table_width))
 
-        p_hit = lambda z_k, d : self.eta/np.sqrt(2*np.pi*self.sigma_hit**2)* np.exp((-(z_k - d)**2)/(2*self.sigma_hit**2)) if np.all((0<=z_k) & (z_k<=self.z_max)) else 0
-        p_short = lambda z_k, d : 2/d*(1 - z_k/d) if np.all((0 <= z_k) & (z_k <= d) & (d != 0)) else 0
-        p_max = lambda z_k, d : 1 if np.all(z_k == self.z_max) else 0
-        p_rand = lambda z_k, d : 1/self.z_max if np.all((0<=z_k) & (z_k <= self.z_max)) else 0
+        # For each possible ground truth distance (columns)
+        for j, d_val in enumerate(self.d_vals):
+            # Create vector of ground truth distances
+            d_vec = np.tile(d_val, (1, self.table_width))
 
-        for i in range(len(self.d_vals)):
-            d_vec = np.tile(self.d_vals[i], (1, self.table_width))
-            p_h = p_hit(self.z_vals, d_vec)
-            p_h /= np.sum(p_h) #Normalizing p_hit
-            p_s = p_short(self.z_vals, d_vec)
-            p_m = p_max(self.z_vals, d_vec)
-            p_r = p_rand(self.z_vals, d_vec)
-            p = self.alpha_hit * p_h + self.alpha_short * p_s + self.alpha_max*p_m + self.alpha_rand*p_r
-            p /= np.sum(p) #Normalizing column
-            self.sensor_model_table[i, :] = p #If not row vector, get Transpose
+            # Calculate hit probabilities for all possible measurements
+            hit_probs = self.find_prob_hit(self.z_vals, d_vec)
+            hit_table[:, j] = hit_probs  # Fill column j
+
+            # Calculate and combine other probabilities
+            short_probs = self.find_prob_short(self.z_vals, d_vec)
+            max_probs = self.find_prob_max(self.z_vals, d_vec)
+            rand_probs = self.find_prob_rand(self.z_vals, d_vec)
+
+            other_table[:, j] = (
+                self.alpha_short * short_probs
+                + self.alpha_max * max_probs
+                + self.alpha_rand * rand_probs
+            )
+
+        # Normalize hit_table across d values (columns)
+        # Each z value (row) should sum to 1
+        d_sums = np.sum(hit_table, axis=1)  # sum across columns for each z
+        d_sums[d_sums == 0] = 0  # Make division by zero result in 0
+        hit_table = np.where(d_sums[:, np.newaxis] != 0, hit_table / d_sums[:, np.newaxis], 0)
+
+        # Combine tables with alpha_hit
+        self.sensor_model_table = self.alpha_hit * hit_table + other_table
+
+        # Final normalization across z values (rows)
+        # Each d value (column) should sum to 1
+        z_sums = np.sum(self.sensor_model_table, axis=0)  # sum down columns
+        z_sums[z_sums == 0] = 0  # Make division by zero result in 0
+        self.sensor_model_table = np.where(z_sums != 0, self.sensor_model_table / z_sums, 0)
+        
 
     def evaluate(self, particles, observation):
         """
