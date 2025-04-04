@@ -17,35 +17,10 @@ np.set_printoptions(threshold=sys.maxsize)
 class SensorModel:
 
     def __init__(self, node=None):
-        ####################################
-        # Adjust these parameters
-        self.alpha_hit =1.0 # 0.74
-        self.alpha_short = 0.0# 0.07
-        self.alpha_max = 0.0#0.07
-        self.alpha_rand = 0.0#0.12
-        self.sigma_hit = 8.0
 
-        # Your sensor table will be a `table_width` x `table_width` np array:
-        self.table_width = 201
-        ####################################
 
         ####################################
-        # Adding state variables; can change eta
         
-        self.eta = 1
-        self.d_init = 0
-        self.d_max = 200
-        self.z_init = 0
-        self.z_max = 200
-
-        self.d_vals = np.linspace(0, self.table_width-1, self.table_width)
-        self.z_vals = np.linspace(0, self.table_width-1, self.table_width)
-
-        self.sensor_model_table = np.empty((self.table_width, self.table_width))
-        self.precompute_sensor_model()
-        self.debug = self.sensor_model_table[0]
-        ####################################
-        return
         node.declare_parameter('map_topic', "default")
         node.declare_parameter('num_beams_per_particle', 1)
         node.declare_parameter('scan_theta_discretization', 1.0)
@@ -66,7 +41,30 @@ class SensorModel:
         node.get_logger().info("%s" % self.scan_theta_discretization)
         node.get_logger().info("%s" % self.scan_field_of_view)
 
+        ####################################
+        # Adjust these parameters
+        self.alpha_hit =0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 8.0
 
+        # Your sensor table will be a `table_width` x `table_width` np array:
+        self.table_width = 201
+        ####################################
+        
+        self.d_init = 0
+        self.d_max = 200
+        self.z_init = 0
+        self.z_max = 200
+
+        self.d_vals = np.linspace(0, self.table_width-1, self.table_width)
+        self.z_vals = np.linspace(0, self.table_width-1, self.table_width)
+
+        self.sensor_model_table = np.empty((self.table_width, self.table_width))
+        self.precompute_sensor_model()
+        ####################################
+        # Adding state variables; can change eta
 
         # Create a simulated laser scan
         self.scan_sim = PyScanSimulator2D(
@@ -93,7 +91,7 @@ class SensorModel:
         mask = (0 <= z_k) & (z_k <= self.z_max)
         return np.where(
             mask,
-            self.eta
+            1
             / np.sqrt(2 * np.pi * self.sigma_hit**2)
             * np.exp((-((z_k - d) ** 2)) / (2 * self.sigma_hit**2)),
             0,
@@ -161,20 +159,20 @@ class SensorModel:
             )
 
         # Normalize hit_table across d values (columns)
-        # Each z value (row) should sum to 1
-        d_sums = np.sum(hit_table, axis=1)  # sum across columns for each z
-        d_sums[d_sums == 0] = 0  # Make division by zero result in 0
-        hit_table = np.where(d_sums[:, np.newaxis] != 0, hit_table / d_sums[:, np.newaxis], 0)
+        d_sums = np.sum(hit_table, axis=0)  # Sum across columns
+        # Prevent division by zero by setting the denominator equal to 1 if it was 0 
+        # (numerator will still be 0 since probabilities are non-negative)
+        d_sums[d_sums == 0] = 1  
+        hit_table /= d_sums[np.newaxis, :]  # Normalize each column by dividing it by its sum
 
         # Combine tables with alpha_hit
         self.sensor_model_table = self.alpha_hit * hit_table + other_table
 
-        # Final normalization across z values (rows)
-        # Each d value (column) should sum to 1
-        z_sums = np.sum(self.sensor_model_table, axis=0)  # sum down columns
-        z_sums[z_sums == 0] = 0  # Make division by zero result in 0
-        self.sensor_model_table = np.where(z_sums != 0, self.sensor_model_table / z_sums, 0)
-        
+        # Final normalization only if necessary
+        z_sums = np.sum(self.sensor_model_table, axis=0)
+        if not np.allclose(z_sums, 1):
+            self.sensor_model_table /= z_sums[np.newaxis, :]
+
 
     def evaluate(self, particles, observation):
         """
