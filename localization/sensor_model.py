@@ -16,11 +16,7 @@ np.set_printoptions(threshold=sys.maxsize)
 
 class SensorModel:
 
-    def __init__(self, node=None):
-
-
-        ####################################
-        
+    def __init__(self, node):
         node.declare_parameter('map_topic', "default")
         node.declare_parameter('num_beams_per_particle', 1)
         node.declare_parameter('scan_theta_discretization', 1.0)
@@ -35,15 +31,9 @@ class SensorModel:
         self.lidar_scale_to_map_scale = node.get_parameter(
             'lidar_scale_to_map_scale').get_parameter_value().double_value
 
-
-        node.get_logger().info("%s" % self.map_topic)
-        node.get_logger().info("%s" % self.num_beams_per_particle)
-        node.get_logger().info("%s" % self.scan_theta_discretization)
-        node.get_logger().info("%s" % self.scan_field_of_view)
-
         ####################################
         # Adjust these parameters
-        self.alpha_hit =0.74
+        self.alpha_hit = 0.74
         self.alpha_short = 0.07
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
@@ -52,19 +42,28 @@ class SensorModel:
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
         ####################################
+
+        ####################################
+        # Adding state variables; can change eta
         
+        self.eta = 1
         self.d_init = 0
         self.d_max = 200
         self.z_init = 0
         self.z_max = 200
+        self.d_vals = np.linspace(self.d_init, self.d_max, self.table_width)
+        self.z_vals = np.linspace(self.z_init, self.z_max, self.table_width)
 
-        self.d_vals = np.linspace(0, self.table_width-1, self.table_width)
-        self.z_vals = np.linspace(0, self.table_width-1, self.table_width)
+        ####################################
 
+        node.get_logger().info("%s" % self.map_topic)
+        node.get_logger().info("%s" % self.num_beams_per_particle)
+        node.get_logger().info("%s" % self.scan_theta_discretization)
+        node.get_logger().info("%s" % self.scan_field_of_view)
+
+        # Precompute the sensor model table
         self.sensor_model_table = np.empty((self.table_width, self.table_width))
         self.precompute_sensor_model()
-        ####################################
-        # Adding state variables; can change eta
 
         # Create a simulated laser scan
         self.scan_sim = PyScanSimulator2D(
