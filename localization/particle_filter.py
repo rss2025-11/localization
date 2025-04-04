@@ -150,6 +150,12 @@ class ParticleFilter(Node):
 
         odom_robot = np.array([delta_x, delta_y, delta_angle])
 
+        self.motion_model.update_noise(
+            odom_msg.twist.twist.linear.x,
+            odom_msg.twist.twist.linear.y,
+            odom_msg.twist.twist.angular.z,
+        )
+
         with self.particles_lock:
             self.particles = self.motion_model.evaluate(self.particles, odom_robot)
 
@@ -346,6 +352,13 @@ class ParticleFilter(Node):
         marker.color.b = 0.0
 
         self.viz_pose_pub.publish(marker)
+
+    def param_update_callback(self, params):
+        self.motion_model.update_noise(
+            params.linear_x,
+            params.linear_y,
+            params.angular_z,
+        )
 
 
 def main(args=None):

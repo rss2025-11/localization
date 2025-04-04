@@ -1,5 +1,5 @@
 import numpy as np
-
+import rclpy
 
 class MotionModel:
 
@@ -16,6 +16,9 @@ class MotionModel:
         # TODO: make the noise params variable on control commands
         ####################################
         node.declare_parameter("deterministic", False)
+        node.declare_parameter("k_vel_trans", 0.001)
+        node.declare_parameter("k_vel_rot", 0.002)
+        node.declare_parameter("var", 0.1)
 
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
@@ -29,6 +32,33 @@ class MotionModel:
             self.num_particles = (
                 node.get_parameter("num_particles").get_parameter_value().integer_value
             )
+
+        # Set up parameter callback
+        self.param_callback = node.add_on_set_parameters_callback(self.parameters_callback)
+
+        self.node = node
+
+    def parameters_callback(self, params):
+        for param in params:
+            if param.name == "k_vel_trans":
+                self.k_vel_trans = param.value
+            elif param.name == "k_vel_rot":
+                self.k_vel_rot = param.value
+            elif param.name == "var":
+                self.var = param.value
+            elif param.name == "deterministic":
+                self.deterministic = param.value
+        return rclpy.node.SetParametersResult(successful=True)
+
+    def update_noise(self, linear_x, linear_y, angular_z):
+        translation_velocity = np.sqrt(linear_x**2 + linear_y**2)
+        rotation_velocity = angular_z
+
+        self.k_vel_trans = self.node.get_parameter("k_vel_trans").get_parameter_value().double_value
+        self.k_vel_rot = self.node.get_parameter("k_vel_rot").get_parameter_value().double_value
+        self.var = self.node.get_parameter("var").get_parameter_value().double_value
+
+        self.var += (self.k_vel_trans * translation_velocity + self.k_vel_rot * rotation_velocity)
 
     def evaluate(self, particles, odometry):
         """
