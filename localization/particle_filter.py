@@ -23,6 +23,9 @@ from tf_transformations import quaternion_from_euler
 # from tf2_ros import TransformBroadcaster
 # from geometry_msgs.msg import TransformStamped
 
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
+
 
 class ParticleFilter(Node):
 
@@ -96,6 +99,7 @@ class ParticleFilter(Node):
 
         self.viz_particle_pub = self.create_publisher(MarkerArray, "/viz/particles", 1)
         self.viz_pose_pub = self.create_publisher(Marker, "/viz/pose_estimate", 1)
+        self.tf_broadcaster = TransformBroadcaster(self)
 
     ###################
 
@@ -230,7 +234,26 @@ class ParticleFilter(Node):
         self.odom_pub.publish(new_pose_estimate)
         self.viz_pose_estimate([mean_x, mean_y, mean_theta])
 
-        # TODO: Publish transformation for real world
+        # Create and publish transform
+        transform = TransformStamped()
+        transform.header.stamp = self.get_clock().now().to_msg()
+        transform.header.frame_id = "map"
+        transform.child_frame_id = self.particle_filter_frame
+        
+        # Set translation
+        transform.transform.translation.x = mean_x
+        transform.transform.translation.y = mean_y
+        transform.transform.translation.z = 0.0
+        
+        # Set rotation
+        transform.transform.rotation.x = q[0]
+        transform.transform.rotation.y = q[1]
+        transform.transform.rotation.z = q[2]
+        transform.transform.rotation.w = q[3]
+        
+        # Publish transform
+        self.tf_broadcaster.sendTransform(transform)
+        
 
     def run_k_means(self, particles):
         """
