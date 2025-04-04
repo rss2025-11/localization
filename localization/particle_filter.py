@@ -113,12 +113,16 @@ class ParticleFilter(Node):
         with self.particles_lock:
             x = pose_msg.pose.pose.position.x
             y = pose_msg.pose.pose.position.y
-            theta = 0
-            variance = 1
+            quaternion = pose_msg.pose.pose.orientation
+            theta = 2 * np.arctan2(quaternion.z, quaternion.w)
+            variance = 0.1
             position_noise = np.random.normal(0, variance, (self.num_particles, 2))
-            heading_noise = np.random.uniform(0, 2 * np.pi, (self.num_particles, 1))
+            # TODO: why normal vs gaussian noise?
+            heading_noise = np.random.normal(0, variance, (self.num_particles, 1))
             pose_matrix = np.stack([[x, y, theta] for _ in range(self.num_particles)])
             self.particles = pose_matrix + np.hstack((position_noise, heading_noise))
+            # Ensure angles are wrapped to [-π, π]
+            self.particles[:, 2] = np.arctan2(np.sin(self.particles[:, 2]), np.cos(self.particles[:, 2]))
 
     def laser_callback(self, laser_msg):
         # Convert ranges from array.array to numpy array
