@@ -221,21 +221,16 @@ class SensorModel:
         # for each particle, we are determining how likely the observation is based on the scan
         probabilities = np.empty(len(particles))
 
-        print("Made to line 169")
         for i in range(len(clipped_scans)):
             # find probability of observation given particle_scan
             particle_scan = clipped_scans[i]
-            print("Made to line 173")
             p = 1
             for j in range(len(particle_scan)):
                 ray_truth = particle_scan[j]
                 d_index = (np.abs(self.d_vals - ray_truth)).argmin()
                 z_index= (np.abs(self.z_vals - clipped_observation[j])).argmin()
                 p *= self.sensor_model_table[z_index][d_index]
-                print("Made to line 180")
-
-
-            probabilities[j] = p
+            probabilities[i] = p
         
         return probabilities
 
