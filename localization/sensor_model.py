@@ -221,23 +221,17 @@ class SensorModel:
         clipped_observation = np.clip(scaled_observation, 0, self.z_max)
         downsampled_observation = clipped_observation[::self.num_beams_per_particle]
         
-        d_indices = np.clip(
-            np.digitize(clipped_scans.flatten(), self.d_vals) - 1,
-            0,
-            self.table_width - 1
-        ).reshape(clipped_scans.shape)
+        # Get indices for the lookup table - subtract 1 from digitize results since we want 0-based indices
+        d_indices = np.digitize(clipped_scans, self.d_vals) - 1
+        d_indices = np.clip(d_indices, 0, self.table_width - 1)
         
-        z_indices = np.clip(
-            np.digitize(downsampled_observation, self.z_vals) - 1,
-            0,
-            self.table_width - 1
-        )
+        z_indices = np.digitize(downsampled_observation, self.z_vals) - 1
+        z_indices = np.clip(z_indices, 0, self.table_width - 1)
         
-        # Create broadcasted indices for vectorized lookup
-        z_indices_broadcast = z_indices[np.newaxis, :]
-        probabilities_table = self.sensor_model_table[z_indices_broadcast, d_indices]
+        # Vectorized lookup using broadcasting
+        probabilities_table = self.sensor_model_table[z_indices[:, np.newaxis], d_indices.T]
         
-        return np.prod(probabilities_table, axis=1)
+        return np.prod(probabilities_table.T, axis=1)
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
