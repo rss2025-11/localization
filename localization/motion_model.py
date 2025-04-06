@@ -11,8 +11,8 @@ class MotionModel:
         # model here.
 
         # noise params
-        self.param1 = 0
-        self.param2 = 0.1 # this is standard deviation
+        self.param1 = 0.0
+        self.param2 = 0.001  # this is standard deviation
         self.translation_noise = None
         self.rotation_noise = None
         self.noise_model = self.gaussian_noise
@@ -26,8 +26,12 @@ class MotionModel:
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
         )
-        self.k_vel_trans = node.get_parameter("k_vel_trans").get_parameter_value().double_value
-        self.k_vel_rot = node.get_parameter("k_vel_rot").get_parameter_value().double_value
+        self.k_vel_trans = (
+            node.get_parameter("k_vel_trans").get_parameter_value().double_value
+        )
+        self.k_vel_rot = (
+            node.get_parameter("k_vel_rot").get_parameter_value().double_value
+        )
         try:
             self.num_particles = (
                 node.get_parameter("num_particles").get_parameter_value().integer_value
@@ -51,8 +55,6 @@ class MotionModel:
                 self.k_vel_trans = param.value
             elif param.name == "k_vel_rot":
                 self.k_vel_rot = param.value
-            elif param.name == "var":
-                self.var = param.value
             elif param.name == "deterministic":
                 self.deterministic = param.value
         return rclpy.node.SetParametersResult(successful=True)
@@ -63,12 +65,9 @@ class MotionModel:
         which the sensor tends to report values that are close to the true value.
         """
         # Update variance based on velocities
-        self.node.get_logger().info(f"Velocity: {velocity}")
-        self.var = self.param2 + (k_vel * velocity)
-        std = 0.2 + (k_vel * velocity)    # for debugging
-        self.node.get_logger().info(f"std: {std}")
-        return np.random.normal(self.param1, std) # for debugging
-        return np.random.normal(self.param1, np.sqrt(self.var))
+        std = self.param2 + np.abs((k_vel * velocity))
+        self.node.get_logger().info(f"mean: {self.param1}, std: {std}")
+        return np.random.normal(self.param1, std)
 
     def uniform_noise(self, velocity, k_vel):
         """
@@ -77,9 +76,9 @@ class MotionModel:
         """
         # Update range based on velocities
         range_size = self.param2 + (k_vel * velocity)
-        return np.random.uniform(
-            self.param1 - range_size / 2, self.param1 + range_size / 2
-        )
+        min_val = self.param1 - range_size / 2
+        max_val = self.param1 + range_size / 2
+        return np.random.uniform(min_val, max_val)
 
     def exponential_noise(self, velocity, k_vel):
         """
@@ -91,21 +90,20 @@ class MotionModel:
         param2 is the scale parameter of the exponential distribution.
         """
         # Update scale parameter based on velocities
-        scale = self.param2 + (k_vel * velocity)
+        scale = self.param2 + np.abs((k_vel * velocity))
         return np.random.exponential(scale) + self.param1
 
     def update_noise(self, linear_x, linear_y, angular_z):
         translation_velocity = np.sqrt(linear_x**2 + linear_y**2)
         rotation_velocity = angular_z
-        # self.node.get_logger().info(
-        #     f"Translation noise: {self.translation_noise}, Rotation noise: {self.rotation_noise}"
-        # )
+        self.node.get_logger().info(
+            f"Translation noise: {self.translation_noise}, Rotation noise: {self.rotation_noise}"
+        )
 
         self.translation_noise = self.noise_model(
             translation_velocity, self.k_vel_trans
         )
         self.rotation_noise = self.noise_model(rotation_velocity, self.k_vel_rot)
-
 
     def apply_noise(self, particles):
         """
@@ -114,7 +112,6 @@ class MotionModel:
         """
         # If either noises are None, then update with 0 velocities
         if self.translation_noise is None or self.rotation_noise is None:
-            self.node.get_logger().info(f'{self.translation_noise}, {self.rotation_noise}')
             self.update_noise(0, 0, 0)
 
         # Apply noise component-wise
@@ -153,7 +150,7 @@ class MotionModel:
         # odometry asumed to be an np.array
 
         # Multiply odometry by -1 for real world
-        odometry = odometry.copy() # * -1
+        odometry = odometry.copy()  # * -1
         # transform odom from robot frame to world frame using current pose estimate
 
         x_particles = particles[:, 0]
