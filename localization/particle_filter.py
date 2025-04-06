@@ -107,6 +107,9 @@ class ParticleFilter(Node):
         self.viz_pose_pub = self.create_publisher(Marker, "/viz/pose_estimate", 1)
         self.tf_broadcaster = TransformBroadcaster(self)
 
+        self.last_scan_process_time = self.get_clock().now()
+        self.scan_process_period = 1 / 10  # 10 Hz
+
     ###################
 
     # Implement the MCL algorithm
@@ -139,6 +142,11 @@ class ParticleFilter(Node):
             )
 
     def laser_callback(self, laser_msg):
+        if self.get_clock().now() - self.last_scan_process_time < self.scan_process_period:
+            return
+
+        self.last_scan_process_time = self.get_clock().now()
+
         # Convert ranges from array.array to numpy array
         ranges = np.array(laser_msg.ranges)
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
