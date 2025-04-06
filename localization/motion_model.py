@@ -13,15 +13,16 @@ class MotionModel:
         # noise params
         self.param1 = 0.0
         self.param2 = 0.001  # this is standard deviation
-        self.translation_noise = None
-        self.rotation_noise = None
+        self.x_noise = None
+        self.y_noise = None
+        self.theta_noise = None
         self.noise_model = self.gaussian_noise
 
         # TODO: make the noise params variable on control commands
         ####################################
         node.declare_parameter("deterministic", False)
-        node.declare_parameter("k_vel_trans", 0.001)
-        node.declare_parameter("k_vel_rot", 0.002)
+        node.declare_parameter("k_vel_trans", 0.01)
+        node.declare_parameter("k_vel_rot", 0.02)
 
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
@@ -66,7 +67,7 @@ class MotionModel:
         """
         # Update variance based on velocities
         std = self.param2 + np.abs((k_vel * velocity))
-        return np.random.normal(self.param1, std, size=(self.num_particles, 2))
+        return np.random.normal(self.param1, std, size=(self.num_particles,))
 
     def uniform_noise(self, velocity, k_vel):
         """
@@ -77,7 +78,7 @@ class MotionModel:
         range_size = self.param2 + (k_vel * velocity)
         min_val = self.param1 - range_size / 2
         max_val = self.param1 + range_size / 2
-        return np.random.uniform(min_val, max_val, size=(self.num_particles, 2))
+        return np.random.uniform(min_val, max_val, size=(self.num_particles,))
 
     def exponential_noise(self, velocity, k_vel):
         """
@@ -90,29 +91,27 @@ class MotionModel:
         """
         # Update scale parameter based on velocities
         scale = self.param2 + np.abs((k_vel * velocity))
-        return np.random.exponential(scale, size=(self.num_particles, 2)) + self.param1
+        return np.random.exponential(scale, size=(self.num_particles,)) + self.param1
 
     def update_noise(self, linear_x, linear_y, angular_z):
-        translation_velocity = np.sqrt(linear_x**2 + linear_y**2)
-        rotation_velocity = angular_z
 
-        self.translation_noise = self.noise_model(
-            translation_velocity, self.k_vel_trans
-        )
-        self.rotation_noise = self.noise_model(rotation_velocity, self.k_vel_rot)[:, 0]
+        self.x_noise = self.noise_model(linear_x, self.k_vel_trans)
+        self.y_noise = self.noise_model(linear_y, self.k_vel_trans)
+        self.theta_noise = self.noise_model(angular_z, self.k_vel_rot)
 
     def apply_noise(self, particles):
         """
         Applies translation and rotation noise to particles.
-        Uses pre-computed self.translation_noise and self.rotation_noise.
+        Uses pre-computed self.x_noise, self.y_noise, and self.theta_noise.
         """
-        # If either noises are None, then update with 0 velocities
-        if self.translation_noise is None or self.rotation_noise is None:
+        # If any noises are None, then update with 0 velocities
+        if self.x_noise is None or self.y_noise is None or self.theta_noise is None:
             self.update_noise(0, 0, 0)
 
         # Apply noise component-wise
-        particles[:, 0:2] += self.translation_noise  # x, y noise
-        particles[:, 2] += self.rotation_noise  # theta noise
+        particles[:, 0] += self.x_noise  # x noise
+        particles[:, 1] += self.y_noise  # y noise
+        particles[:, 2] += self.theta_noise  # theta noise
 
         # Renormalize angles after adding noise
         particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))
