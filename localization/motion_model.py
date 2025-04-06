@@ -66,8 +66,7 @@ class MotionModel:
         """
         # Update variance based on velocities
         std = self.param2 + np.abs((k_vel * velocity))
-        self.node.get_logger().info(f"mean: {self.param1}, std: {std}")
-        return np.random.normal(self.param1, std)
+        return np.random.normal(self.param1, std, size=(self.num_particles, 2))
 
     def uniform_noise(self, velocity, k_vel):
         """
@@ -78,7 +77,7 @@ class MotionModel:
         range_size = self.param2 + (k_vel * velocity)
         min_val = self.param1 - range_size / 2
         max_val = self.param1 + range_size / 2
-        return np.random.uniform(min_val, max_val)
+        return np.random.uniform(min_val, max_val, size=(self.num_particles, 2))
 
     def exponential_noise(self, velocity, k_vel):
         """
@@ -91,19 +90,16 @@ class MotionModel:
         """
         # Update scale parameter based on velocities
         scale = self.param2 + np.abs((k_vel * velocity))
-        return np.random.exponential(scale) + self.param1
+        return np.random.exponential(scale, size=(self.num_particles, 2)) + self.param1
 
     def update_noise(self, linear_x, linear_y, angular_z):
         translation_velocity = np.sqrt(linear_x**2 + linear_y**2)
         rotation_velocity = angular_z
-        self.node.get_logger().info(
-            f"Translation noise: {self.translation_noise}, Rotation noise: {self.rotation_noise}"
-        )
 
         self.translation_noise = self.noise_model(
             translation_velocity, self.k_vel_trans
         )
-        self.rotation_noise = self.noise_model(rotation_velocity, self.k_vel_rot)
+        self.rotation_noise = self.noise_model(rotation_velocity, self.k_vel_rot)[:, 0]
 
     def apply_noise(self, particles):
         """
@@ -115,8 +111,7 @@ class MotionModel:
             self.update_noise(0, 0, 0)
 
         # Apply noise component-wise
-        particles[:, 0] += self.translation_noise  # x noise
-        particles[:, 1] += self.translation_noise  # y noise
+        particles[:, 0:2] += self.translation_noise  # x, y noise
         particles[:, 2] += self.rotation_noise  # theta noise
 
         # Renormalize angles after adding noise
