@@ -250,9 +250,6 @@ class SensorModel:
                 p *= self.sensor_model_table[z_index][d_index]
             probabilities[i] = p
 
-        # normalize probabilities
-        probabilities /= np.sum(probabilities)
-
         return probabilities
 
         ####################################
