@@ -211,66 +211,33 @@ class SensorModel:
             print("Map not set")
             return
 
-        ####################################
-        # TODO
-        # Evaluate the sensor model here!
-        #
-        # You will probably want to use this function
-        # to perform ray tracing from all the particles.
-        # This produces a matrix of size N x num_beams_per_particle
-
-        # simulation is ground truth; d
-        # what car is seeing; array of all distances
-        scans = self.scan_sim.scan(particles)  # The ray-tracing done for us
-        scans /= (
-            self.resolution * self.lidar_scale_to_map_scale
-        )  # convert scan results from meters to pixels
-        # z_max is defined in pixels
-        clipped_scans = np.clip(
-            scans, 0, self.z_max
-        )  # convert scan results from meters to pixels
-
-        # simulated scans given a particle; z_k
-        observation /= (
-            self.resolution * self.lidar_scale_to_map_scale
-        )  # convert observation results from meters to pixels
-        clipped_observation = np.clip(observation, 0, self.z_max)
-
-        # downsample the observations using num_beams_per_particle
-        clipped_observation = clipped_observation[:: self.num_beams_per_particle]
-
-        # for each particle, we are determining how likely the observation is based on the scan
-        probabilities = np.empty(len(particles))
-
-        # Find closest indices for all simulated rays (d_indices)
-        # Using np.digitize is faster than using argmin for this task
+        scans = self.scan_sim.scan(particles)
+        scale_factor = self.resolution * self.lidar_scale_to_map_scale
+        
+        scaled_scans = scans / scale_factor
+        clipped_scans = np.clip(scaled_scans, 0, self.z_max)
+        
+        scaled_observation = observation / scale_factor
+        clipped_observation = np.clip(scaled_observation, 0, self.z_max)
+        downsampled_observation = clipped_observation[::self.num_beams_per_particle]
+        
         d_indices = np.clip(
             np.digitize(clipped_scans.flatten(), self.d_vals) - 1,
             0,
-            self.table_width - 1,
-        )
-        d_indices = d_indices.reshape(clipped_scans.shape)
-
-        # Find closest indices for all observation rays (z_indices)
-        # Only need to compute once since observation is the same for all particles
+            self.table_width - 1
+        ).reshape(clipped_scans.shape)
+        
         z_indices = np.clip(
-            np.digitize(clipped_observation, self.z_vals) - 1, 0, self.table_width - 1
+            np.digitize(downsampled_observation, self.z_vals) - 1,
+            0,
+            self.table_width - 1
         )
-
-        # Create index pairs to look up in the sensor model table
-        # For each particle and ray, get the probability from the table
-        probabilities_table = np.zeros(clipped_scans.shape)
-        for i in range(len(clipped_scans)):
-            for j in range(len(clipped_observation)):
-                probabilities_table[i, j] = self.sensor_model_table[
-                    z_indices[j], d_indices[i, j]
-                ]
-
-        # Multiply probabilities along the beam axis for each particle
-        probabilities = np.prod(probabilities_table, axis=1)
-        return probabilities
-
-        ####################################
+        
+        # Create broadcasted indices for vectorized lookup
+        z_indices_broadcast = z_indices[np.newaxis, :]
+        probabilities_table = self.sensor_model_table[z_indices_broadcast, d_indices]
+        
+        return np.prod(probabilities_table, axis=1)
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
