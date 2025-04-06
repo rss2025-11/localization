@@ -142,7 +142,10 @@ class ParticleFilter(Node):
             )
 
     def laser_callback(self, laser_msg):
-        if self.get_clock().now() - self.last_scan_process_time < self.scan_process_period:
+        seconds_since_last_scan = (
+            self.get_clock().now() - self.last_scan_process_time
+        ).nanoseconds / 1e9
+        if seconds_since_last_scan < self.scan_process_period:
             return
 
         self.last_scan_process_time = self.get_clock().now()
@@ -151,15 +154,19 @@ class ParticleFilter(Node):
         ranges = np.array(laser_msg.ranges)
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
+        if probabilities is None:
+            # map not up yet
+            return
+
         probabilities /= np.sum(probabilities)
 
+        indices = np.random.choice(
+            self.particles.shape[0],
+            size=self.particles.shape[0],
+            replace=True,
+            p=probabilities,
+        )
         with self.particles_lock:
-            indices = np.random.choice(
-                self.particles.shape[0],
-                size=self.particles.shape[0],
-                replace=True,
-                p=probabilities,
-            )
             self.particles = self.particles[indices]
 
         particles_copy = self.particles.copy()
