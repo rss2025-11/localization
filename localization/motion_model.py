@@ -12,7 +12,7 @@ class MotionModel:
 
         # noise params
         self.param1 = 0.0
-        self.param2 = 0.001  # this is standard deviation
+        self.param2 = 0.005  # this is standard deviation
         self.x_noise = None
         self.y_noise = None
         self.theta_noise = None
