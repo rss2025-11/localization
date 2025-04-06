@@ -143,6 +143,8 @@ class ParticleFilter(Node):
         ranges = np.array(laser_msg.ranges)
         probabilities = self.sensor_model.evaluate(self.particles, ranges)
 
+        probabilities /= np.sum(probabilities)
+
         with self.particles_lock:
             indices = np.random.choice(
                 self.particles.shape[0],
