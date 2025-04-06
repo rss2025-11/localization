@@ -236,13 +236,16 @@ class ParticleFilter(Node):
         new_pose_estimate.pose.pose.orientation.z = q[2]
         new_pose_estimate.pose.pose.orientation.w = q[3]
 
-        # Compute covariance using all particles
+        # Compute covariance using a fifth of the particles
+        sample_size = len(particles_copy) // 5
+        sampled_particles = particles_copy[np.random.choice(len(particles_copy), sample_size, replace=False)]
+        
         cov = np.zeros((6, 6))
-        xy_cov = np.cov(particles_copy[:, 0:2].T)
+        xy_cov = np.cov(sampled_particles[:, 0:2].T)
         cov[0:2, 0:2] = xy_cov
 
         # Angular variance using circular statistics
-        angles = particles_copy[:, 2]
+        angles = sampled_particles[:, 2]
         R = np.sqrt(np.mean(np.cos(angles)) ** 2 + np.mean(np.sin(angles)) ** 2)
         angular_var = -2 * np.log(R)  # von Mises circular variance
         cov[5, 5] = angular_var
