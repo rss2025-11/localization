@@ -121,8 +121,8 @@ class ParticleFilter(Node):
             theta = 2 * np.arctan2(quaternion.z, quaternion.w)
             variance = 0.1
             position_noise = np.random.normal(0, variance, (self.num_particles, 2))
-            # TODO: why normal vs gaussian noise?
-            heading_noise = np.random.normal(0, variance, (self.num_particles, 1))
+            # # TODO: why normal vs gaussian noise?
+            heading_noise = np.random.normal(0, 0.08*np.pi/2, (self.num_particles, 1))
             pose_matrix = np.stack([[x, y, theta] for _ in range(self.num_particles)])
             self.particles = pose_matrix + np.hstack((position_noise, heading_noise))
             # Ensure angles are wrapped to [-π, π]
@@ -163,10 +163,8 @@ class ParticleFilter(Node):
             odom_msg.twist.twist.linear.y,
             odom_msg.twist.twist.angular.z,
         )
-
         with self.particles_lock:
-            self.particles = self.motion_model.evaluate(self.particles, odom_robot)
-
+            self.particles = self.motion_model.evaluate(self.particles, odom_robot)         
         self.prev_time = curr_time
 
         particles_copy = self.particles.copy()

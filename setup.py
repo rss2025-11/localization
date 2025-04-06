@@ -24,12 +24,12 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
          ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml', 'localization/params.yaml', 'localization/test/test_params.yaml']),
+        ('share/' + package_name, ['package.xml', 'localization/params.yaml', 'localization/real_params.yaml', 'localization/test/test_params.yaml']),
         ('share/localization/launch',
          glob.glob(os.path.join('launch', '*launch.*')) + glob.glob(os.path.join('launch/unit_tests', '*launch.*'))),
         ('share/localization/test_map', glob.glob(os.path.join('test_map', '*'))),
     ],
-    install_requires=['setuptools', "Cython"],
+    install_requires=['setuptools', "Cython","scikit-learn"],
     zip_safe=True,
     maintainer='alanyu',
     maintainer_email='alanyu@csail.mit.edu',
@@ -41,6 +41,7 @@ setup(
             'particle_filter = localization.particle_filter:main',
             'sensor_model_test = localization.test.sensor_model_test:main',
             'motion_model_test = localization.test.motion_model_test:main',
+            'path_plotter = localization.path_plotter:main',
         ],
     },
 

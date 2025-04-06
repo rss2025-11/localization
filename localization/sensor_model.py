@@ -195,7 +195,7 @@ class SensorModel:
         """
 
         if not self.map_set:
-            self.node.get_logger().info("Map not set")
+            print("Map not set")
             return
 
         ####################################

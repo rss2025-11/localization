@@ -11,7 +11,7 @@ class MotionModel:
 
         # noise params
         self.mu = 0
-        self.var = 0.1
+        self.var = 0.01
 
         # TODO: make the noise params variable on control commands
         ####################################
@@ -84,6 +84,9 @@ class MotionModel:
 
         ####################################
         # odometry asumed to be an np.array
+
+        # Multiply odometry by -1 for real world
+        odometry = odometry.copy() * -1
 
         # transform odom from robot frame to world frame using current pose estimate
 
