@@ -29,6 +29,8 @@ from geometry_msgs.msg import TransformStamped
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 
+from geometry_msgs.msg import PoseArray, Pose
+
 # Suppress only ConvergenceWarning
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
@@ -103,7 +105,7 @@ class ParticleFilter(Node):
         self.particles_lock = Lock()
         self.particles = np.zeros((self.num_particles, 3))
 
-        self.viz_particle_pub = self.create_publisher(MarkerArray, "/viz/particles", 1)
+        self.viz_particle_pub = self.create_publisher(PoseArray, "/viz/particles", 1)
         self.viz_pose_pub = self.create_publisher(Marker, "/viz/pose_estimate", 1)
         self.tf_broadcaster = TransformBroadcaster(self)
 
@@ -329,41 +331,28 @@ class ParticleFilter(Node):
         return mean_x, mean_y, mean_theta
 
     def viz_particles(self, particles):
-        # Create a marker for each particle
-        marker_array = MarkerArray()
+        """Visualize particles using PoseArray which is much more efficient"""
+        pose_array = PoseArray()
+        pose_array.header.frame_id = "map"
+        pose_array.header.stamp = self.get_clock().now().to_msg()
 
-        for i, particle in enumerate(particles[::5]):
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.id = i
-            marker.type = Marker.ARROW
-            marker.action = Marker.ADD
+        # Only visualize every 5th particle for performance
+        for particle in particles[::5]:
+            pose = Pose()
+            pose.position.x = particle[0]
+            pose.position.y = particle[1]
+            pose.position.z = 0.0
 
-            # Set particle position
-            marker.pose.position.x = particle[0]
-            marker.pose.position.y = particle[1]
-            marker.pose.position.z = 0.0
-
-            # Set particle orientation
+            # Convert angle to quaternion
             q = quaternion_from_euler(0, 0, particle[2])
-            marker.pose.orientation.x = q[0]
-            marker.pose.orientation.y = q[1]
-            marker.pose.orientation.z = q[2]
-            marker.pose.orientation.w = q[3]
+            pose.orientation.x = q[0]
+            pose.orientation.y = q[1]
+            pose.orientation.z = q[2]
+            pose.orientation.w = q[3]
 
-            # Set marker properties
-            marker.scale.x = 0.1  # Arrow length
-            marker.scale.y = 0.05  # Arrow width
-            marker.scale.z = 0.05  # Arrow height
-            marker.color.a = 0.3  # Semi-transparent
-            marker.color.r = 0.0
-            marker.color.g = 1.0
-            marker.color.b = 0.0
+            pose_array.poses.append(pose)
 
-            marker_array.markers.append(marker)
-
-        self.viz_particle_pub.publish(marker_array)
+        self.viz_particle_pub.publish(pose_array)
 
     def viz_pose_estimate(self, pose_estimate):
         # Create a marker for the pose estimate
