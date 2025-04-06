@@ -144,7 +144,7 @@ class ParticleFilter(Node):
     def laser_callback(self, laser_msg):
         seconds_since_last_scan = (
             self.get_clock().now() - self.last_scan_process_time
-        ).to_seconds()
+        ).nanoseconds / 1e9
         if seconds_since_last_scan < self.scan_process_period:
             return
 
@@ -176,7 +176,7 @@ class ParticleFilter(Node):
     def odom_callback(self, odom_msg):
 
         curr_time = self.get_clock().now()
-        delta_time = (curr_time - self.prev_time).to_seconds()
+        delta_time = (curr_time - self.prev_time).nanoseconds / 1e9
 
         delta_x = odom_msg.twist.twist.linear.x * delta_time
         delta_y = odom_msg.twist.twist.linear.y * delta_time
