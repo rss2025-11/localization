@@ -1,6 +1,7 @@
 import numpy as np
 import rclpy
 
+
 class MotionModel:
 
     def __init__(self, node):
@@ -11,7 +12,7 @@ class MotionModel:
 
         # noise params
         self.mu = 0
-        self.var = 0.01
+        self.var = 0.1
 
         # TODO: make the noise params variable on control commands
         ####################################
@@ -34,7 +35,9 @@ class MotionModel:
             )
 
         # Set up parameter callback
-        self.param_callback = node.add_on_set_parameters_callback(self.parameters_callback)
+        self.param_callback = node.add_on_set_parameters_callback(
+            self.parameters_callback
+        )
 
         self.node = node
 
@@ -50,15 +53,69 @@ class MotionModel:
                 self.deterministic = param.value
         return rclpy.node.SetParametersResult(successful=True)
 
+    def gaussian_noise(self, velocity, k_vel):
+        """
+        Gaussian distribution for noise. Good for modelling sensor noise, in
+        which the sensor tends to report values that are close to the true value.
+        """
+        # Update variance based on velocities
+        self.var = self.param2 + (k_vel * velocity)
+        return np.random.normal(self.param1, np.sqrt(self.var))
+
+    def uniform_noise(self, velocity, k_vel):
+        """
+        Uniform distribution for noise. Good prior for any noise, can equally
+        overestimate or underestimate the true value.
+        """
+        # Update range based on velocities
+        range_size = self.param2 + (k_vel * velocity)
+        return np.random.uniform(
+            self.param1 - range_size / 2, self.param1 + range_size / 2
+        )
+
+    def exponential_noise(self, velocity, k_vel):
+        """
+        Exponential distribution for noise. One-sided and decays exponentially.
+        Good for modelling wheel-slip, in which the car tends to travel less than
+        reported by the odometry.
+
+        param1 is the mean of the exponential distribution.
+        param2 is the scale parameter of the exponential distribution.
+        """
+        # Update scale parameter based on velocities
+        scale = self.param2 + (k_vel * velocity)
+        return np.random.exponential(scale) + self.param1
+
     def update_noise(self, linear_x, linear_y, angular_z):
         translation_velocity = np.sqrt(linear_x**2 + linear_y**2)
         rotation_velocity = angular_z
 
-        self.k_vel_trans = self.node.get_parameter("k_vel_trans").get_parameter_value().double_value
-        self.k_vel_rot = self.node.get_parameter("k_vel_rot").get_parameter_value().double_value
-        self.var = self.node.get_parameter("var").get_parameter_value().double_value
+        self.translation_noise = self.noise_model(
+            translation_velocity, self.k_vel_trans
+        )
+        self.rotation_noise = self.noise_model(rotation_velocity, self.k_vel_rot)
 
-        self.var += (self.k_vel_trans * translation_velocity + self.k_vel_rot * rotation_velocity)
+        self.node.get_logger().info(
+            f"Translation noise: {self.translation_noise}, Rotation noise: {self.rotation_noise}"
+        )
+
+    def apply_noise(self, particles):
+        """
+        Applies translation and rotation noise to particles.
+        Uses pre-computed self.translation_noise and self.rotation_noise.
+        """
+        if not self.translation_noise or not self.rotation_noise:
+            self.update_noise(0, 0, 0)
+
+        # Apply noise component-wise
+        particles[:, 0] += self.translation_noise  # x noise
+        particles[:, 1] += self.translation_noise  # y noise
+        particles[:, 2] += self.rotation_noise  # theta noise
+
+        # Renormalize angles after adding noise
+        particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))
+
+        return particles
 
     def evaluate(self, particles, odometry):
         """
@@ -114,15 +171,8 @@ class MotionModel:
         updated_particles = np.column_stack((x_world, y_world, theta_world))
 
         if not self.deterministic:
-            # Add noise
-            N = particles.shape[0]
-            noise = np.random.normal(self.mu, np.sqrt(self.var), (N, 3))
-            updated_particles += noise
-
-            # Renormalize angles after adding noise
-            updated_particles[:, 2] = np.arctan2(
-                np.sin(updated_particles[:, 2]), np.cos(updated_particles[:, 2])
-            )
+            updated_particles = self.apply_noise(updated_particles)
 
         return updated_particles
+
         ####################################
