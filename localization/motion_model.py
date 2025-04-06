@@ -11,8 +11,11 @@ class MotionModel:
         # model here.
 
         # noise params
-        self.mu = 0
-        self.var = 0.1
+        self.param1 = 0
+        self.param2 = 0.1
+        self.translation_noise = None
+        self.rotation_noise = None
+        self.noise_model = self.gaussian_noise
 
         # TODO: make the noise params variable on control commands
         ####################################
