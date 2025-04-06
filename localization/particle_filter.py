@@ -26,6 +26,11 @@ from tf_transformations import quaternion_from_euler
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+
+# Suppress only ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 class ParticleFilter(Node):
 
