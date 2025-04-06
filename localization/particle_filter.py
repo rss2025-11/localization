@@ -332,7 +332,7 @@ class ParticleFilter(Node):
         # Create a marker for each particle
         marker_array = MarkerArray()
 
-        for i, particle in enumerate(particles):
+        for i, particle in enumerate(particles[::5]):
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = self.get_clock().now().to_msg()
