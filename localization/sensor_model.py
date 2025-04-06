@@ -1,6 +1,7 @@
 import numpy as np
 from scan_simulator_2d import PyScanSimulator2D
-# Try to change to just `from scan_simulator_2d import PyScanSimulator2D` 
+
+# Try to change to just `from scan_simulator_2d import PyScanSimulator2D`
 # if any error re: scan_simulator_2d occurs
 
 from tf_transformations import euler_from_quaternion
@@ -13,23 +14,36 @@ import math
 np.set_printoptions(threshold=sys.maxsize)
 
 
-
 class SensorModel:
 
     def __init__(self, node):
-        node.declare_parameter('map_topic', "default")
-        node.declare_parameter('num_beams_per_particle', 1)
-        node.declare_parameter('scan_theta_discretization', 1.0)
-        node.declare_parameter('scan_field_of_view', 1.0)
-        node.declare_parameter('lidar_scale_to_map_scale', 1.0)
+        node.declare_parameter("map_topic", "default")
+        node.declare_parameter("num_beams_per_particle", 1)
+        node.declare_parameter("scan_theta_discretization", 1.0)
+        node.declare_parameter("scan_field_of_view", 1.0)
+        node.declare_parameter("lidar_scale_to_map_scale", 1.0)
 
-        self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
-        self.num_beams_per_particle = node.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
-        self.scan_theta_discretization = node.get_parameter(
-            'scan_theta_discretization').get_parameter_value().double_value
-        self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
-        self.lidar_scale_to_map_scale = node.get_parameter(
-            'lidar_scale_to_map_scale').get_parameter_value().double_value
+        self.map_topic = (
+            node.get_parameter("map_topic").get_parameter_value().string_value
+        )
+        self.num_beams_per_particle = (
+            node.get_parameter("num_beams_per_particle")
+            .get_parameter_value()
+            .integer_value
+        )
+        self.scan_theta_discretization = (
+            node.get_parameter("scan_theta_discretization")
+            .get_parameter_value()
+            .double_value
+        )
+        self.scan_field_of_view = (
+            node.get_parameter("scan_field_of_view").get_parameter_value().double_value
+        )
+        self.lidar_scale_to_map_scale = (
+            node.get_parameter("lidar_scale_to_map_scale")
+            .get_parameter_value()
+            .double_value
+        )
 
         ####################################
         # Adjust these parameters
@@ -45,7 +59,7 @@ class SensorModel:
 
         ####################################
         # Adding state variables; can change eta
-        
+
         self.eta = 1
         self.d_init = 0
         self.d_max = 200
@@ -71,16 +85,15 @@ class SensorModel:
             self.scan_field_of_view,
             0,  # This is not the simulator, don't add noise
             0.01,  # This is used as an epsilon
-            self.scan_theta_discretization)
+            self.scan_theta_discretization,
+        )
 
         # Subscribe to the map
         self.map = None
         self.map_set = False
         self.map_subscriber = node.create_subscription(
-            OccupancyGrid,
-            self.map_topic,
-            self.map_callback,
-            1)
+            OccupancyGrid, self.map_topic, self.map_callback, 1
+        )
 
         # Precompute the sensor model table
         self.sensor_model_table = np.empty((self.table_width, self.table_width))
@@ -103,7 +116,7 @@ class SensorModel:
             x, y, where=y != 0, out=np.zeros(y.shape, dtype=np.float64)
         )
         return np.where(mask, 2 * (safe_div(1, d) - safe_div(z_k, d * d)), 0)
-    
+
     def find_prob_max(self, z_k, d):
         mask = z_k == self.z_max
         return np.where(mask, 1, 0)
@@ -111,7 +124,6 @@ class SensorModel:
     def find_prob_rand(self, z_k, d):
         mask = (0 <= z_k) & (z_k <= self.z_max)
         return np.where(mask, 1 / self.z_max, 0)
-    
 
     def precompute_sensor_model(self):
         """
@@ -159,10 +171,12 @@ class SensorModel:
 
         # Normalize hit_table across d values (columns)
         d_sums = np.sum(hit_table, axis=0)  # Sum across columns
-        # Prevent division by zero by setting the denominator equal to 1 if it was 0 
+        # Prevent division by zero by setting the denominator equal to 1 if it was 0
         # (numerator will still be 0 since probabilities are non-negative)
-        d_sums[d_sums == 0] = 1  
-        hit_table /= d_sums[np.newaxis, :]  # Normalize each column by dividing it by its sum
+        d_sums[d_sums == 0] = 1
+        hit_table /= d_sums[
+            np.newaxis, :
+        ]  # Normalize each column by dividing it by its sum
 
         # Combine tables with alpha_hit
         self.sensor_model_table = self.alpha_hit * hit_table + other_table
@@ -171,7 +185,6 @@ class SensorModel:
         z_sums = np.sum(self.sensor_model_table, axis=0)
         if not np.allclose(z_sums, 1):
             self.sensor_model_table /= z_sums[np.newaxis, :]
-
 
     def evaluate(self, particles, observation):
         """
@@ -204,18 +217,23 @@ class SensorModel:
         #
         # You will probably want to use this function
         # to perform ray tracing from all the particles.
-        # This produces a matrix of size N x num_beams_per_particle 
+        # This produces a matrix of size N x num_beams_per_particle
 
         # simulation is ground truth; d
         # what car is seeing; array of all distances
-        scans = self.scan_sim.scan(particles) #The ray-tracing done for us
-        scans /= (self.resolution * self.lidar_scale_to_map_scale) # convert scan results from meters to pixels
+        scans = self.scan_sim.scan(particles)  # The ray-tracing done for us
+        scans /= (
+            self.resolution * self.lidar_scale_to_map_scale
+        )  # convert scan results from meters to pixels
         # z_max is defined in pixels
-        clipped_scans = np.clip(scans, 0, self.z_max) # convert scan results from meters to pixels
-
+        clipped_scans = np.clip(
+            scans, 0, self.z_max
+        )  # convert scan results from meters to pixels
 
         # simulated scans given a particle; z_k
-        observation /= (self.resolution * self.lidar_scale_to_map_scale) # convert observation results from meters to pixels
+        observation /= (
+            self.resolution * self.lidar_scale_to_map_scale
+        )  # convert observation results from meters to pixels
         clipped_observation = np.clip(observation, 0, self.z_max)
 
         # for each particle, we are determining how likely the observation is based on the scan
@@ -228,32 +246,30 @@ class SensorModel:
             for j in range(len(particle_scan)):
                 ray_truth = particle_scan[j]
                 d_index = (np.abs(self.d_vals - ray_truth)).argmin()
-                z_index= (np.abs(self.z_vals - clipped_observation[j])).argmin()
+                z_index = (np.abs(self.z_vals - clipped_observation[j])).argmin()
                 p *= self.sensor_model_table[z_index][d_index]
             probabilities[i] = p
 
         # normalize probabilities
         probabilities /= np.sum(probabilities)
-        
+
         return probabilities
 
         ####################################
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
-        self.map = np.array(map_msg.data, np.double) / 100.
+        self.map = np.array(map_msg.data, np.double) / 100.0
         self.map = np.clip(self.map, 0, 1)
 
-        self.resolution = map_msg.info.resolution # number pixels per meter
+        self.resolution = map_msg.info.resolution  # number pixels per meter
 
         # Convert the origin to a tuple
         origin_p = map_msg.info.origin.position
         origin_o = map_msg.info.origin.orientation
-        origin_o = euler_from_quaternion((
-            origin_o.x,
-            origin_o.y,
-            origin_o.z,
-            origin_o.w))
+        origin_o = euler_from_quaternion(
+            (origin_o.x, origin_o.y, origin_o.z, origin_o.w)
+        )
         origin = (origin_p.x, origin_p.y, origin_o[2])
 
         # Initialize a map with the laser scan
@@ -263,7 +279,8 @@ class SensorModel:
             map_msg.info.width,
             map_msg.info.resolution,
             origin,
-            0.5)  # Consider anything < 0.5 to be free
+            0.5,
+        )  # Consider anything < 0.5 to be free
 
         # Make the map set
         self.map_set = True
