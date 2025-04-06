@@ -191,9 +191,8 @@ class ParticleFilter(Node):
             odom_msg.twist.twist.angular.z,
         )
 
-        new_particles = self.motion_model.evaluate(self.particles, odom_robot)
         with self.particles_lock:
-            self.particles = new_particles
+            self.particles = self.motion_model.evaluate(self.particles, odom_robot)
 
         self.prev_time = curr_time
 
