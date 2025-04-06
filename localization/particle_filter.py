@@ -12,27 +12,14 @@ assert rclpy
 
 import numpy as np
 
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-
 from threading import Lock
 
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import Marker
 from tf_transformations import quaternion_from_euler
-
-# from tf2_ros import TransformBroadcaster
-# from geometry_msgs.msg import TransformStamped
 
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
-
-import warnings
-from sklearn.exceptions import ConvergenceWarning
-
 from geometry_msgs.msg import PoseArray, Pose
-
-# Suppress only ConvergenceWarning
-warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 
 class ParticleFilter(Node):
@@ -216,7 +203,7 @@ class ParticleFilter(Node):
             pose_estimate: A PoseWithCovarianceStamped message
         """
 
-        mean_x, mean_y, mean_theta = self.run_k_means(particles_copy)
+        mean_x, mean_y, mean_theta = self.aggregate_particles(particles_copy)
 
         # Create odometry message instead of PoseWithCovarianceStamped
         new_pose_estimate = Odometry()
@@ -285,51 +272,24 @@ class ParticleFilter(Node):
         # Publish transform
         self.tf_broadcaster.sendTransform(transform)
 
-    def run_k_means(self, particles):
+    def aggregate_particles(self, particles):
         """
-        Runs k-means clustering on the particles to find the mean pose estimate.
-        Only tries k=1,2 and uses raw data without scaling for efficiency.
+        Computes the mean pose estimate from particles.
+        Uses arithmetic mean for x,y and circular mean for theta.
 
         args:
             particles: An Nx3 matrix of [x y theta]
         returns:
             mean_x, mean_y, mean_theta: Components of the pose estimate
         """
-        # Pre-compute angles once - more efficient than multiple cos/sin calls
-        cos_theta = np.cos(particles[:, 2])
-        sin_theta = np.sin(particles[:, 2])
+        # Simple arithmetic mean for x and y
+        mean_x = np.mean(particles[:, 0])
+        mean_y = np.mean(particles[:, 1])
 
-        # Stack data directly without scaling
-        # Using np.hstack is more efficient than multiple column_stack operations
-        clustering_data = np.hstack(
-            (particles[:, 0:2], cos_theta[:, None], sin_theta[:, None])
-        )
-
-        # Try k=1 first (simple mean)
-        kmeans_1 = KMeans(n_clusters=1, n_init=1)  # n_init=1 for speed
-        kmeans_1.fit(clustering_data)
-        score_1 = kmeans_1.inertia_
-
-        # Only try k=2 if we have enough particles and they're spread out
-        if particles.shape[0] > 50 and score_1 > 1.0:  # Threshold can be tuned
-            kmeans_2 = KMeans(n_clusters=2, n_init=1)
-            kmeans_2.fit(clustering_data)
-            score_2 = kmeans_2.inertia_ / 2  # Normalize by k
-
-            if score_2 < score_1:
-                # Use the larger cluster from k=2
-                labels = kmeans_2.labels_
-                largest_cluster = np.argmax(np.bincount(labels))
-                center = kmeans_2.cluster_centers_[largest_cluster]
-            else:
-                center = kmeans_1.cluster_centers_[0]
-        else:
-            center = kmeans_1.cluster_centers_[0]
-
-        # Extract pose components directly
-        mean_x = center[0]
-        mean_y = center[1]
-        mean_theta = np.arctan2(center[3], center[2])
+        # Circular mean for theta using atan2 of mean sin and cos
+        mean_sin = np.mean(np.sin(particles[:, 2]))
+        mean_cos = np.mean(np.cos(particles[:, 2]))
+        mean_theta = np.arctan2(mean_sin, mean_cos)
 
         return mean_x, mean_y, mean_theta
 
