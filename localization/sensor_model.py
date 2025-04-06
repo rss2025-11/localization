@@ -236,24 +236,37 @@ class SensorModel:
         )  # convert observation results from meters to pixels
         clipped_observation = np.clip(observation, 0, self.z_max)
 
+        # downsample the observations using num_beams_per_particle
+        clipped_scans = clipped_scans[
+            :: len(clipped_scans) // self.num_beams_per_particle
+        ]
+
         # for each particle, we are determining how likely the observation is based on the scan
         probabilities = np.empty(len(particles))
 
         # Find closest indices for all simulated rays (d_indices)
         # Using np.digitize is faster than using argmin for this task
-        d_indices = np.clip(np.digitize(clipped_scans.flatten(), self.d_vals) - 1, 0, self.table_width - 1)
+        d_indices = np.clip(
+            np.digitize(clipped_scans.flatten(), self.d_vals) - 1,
+            0,
+            self.table_width - 1,
+        )
         d_indices = d_indices.reshape(clipped_scans.shape)
 
         # Find closest indices for all observation rays (z_indices)
         # Only need to compute once since observation is the same for all particles
-        z_indices = np.clip(np.digitize(clipped_observation, self.z_vals) - 1, 0, self.table_width - 1)
+        z_indices = np.clip(
+            np.digitize(clipped_observation, self.z_vals) - 1, 0, self.table_width - 1
+        )
 
         # Create index pairs to look up in the sensor model table
         # For each particle and ray, get the probability from the table
         probabilities_table = np.zeros(clipped_scans.shape)
         for i in range(len(clipped_scans)):
             for j in range(len(clipped_observation)):
-                probabilities_table[i, j] = self.sensor_model_table[z_indices[j], d_indices[i, j]]
+                probabilities_table[i, j] = self.sensor_model_table[
+                    z_indices[j], d_indices[i, j]
+                ]
 
         # Multiply probabilities along the beam axis for each particle
         probabilities = np.prod(probabilities_table, axis=1)
