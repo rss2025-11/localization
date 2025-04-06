@@ -22,11 +22,12 @@ class MotionModel:
         node.declare_parameter("deterministic", False)
         node.declare_parameter("k_vel_trans", 0.001)
         node.declare_parameter("k_vel_rot", 0.002)
-        node.declare_parameter("var", 0.1)
 
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
         )
+        self.k_vel_trans = node.get_parameter("k_vel_trans").get_parameter_value().double_value
+        self.k_vel_rot = node.get_parameter("k_vel_rot").get_parameter_value().double_value
         try:
             self.num_particles = (
                 node.get_parameter("num_particles").get_parameter_value().integer_value
