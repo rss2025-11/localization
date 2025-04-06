@@ -237,9 +237,7 @@ class SensorModel:
         clipped_observation = np.clip(observation, 0, self.z_max)
 
         # downsample the observations using num_beams_per_particle
-        clipped_scans = clipped_scans[
-            :: len(clipped_scans) // self.num_beams_per_particle
-        ]
+        clipped_observation = clipped_observation[:: self.num_beams_per_particle]
 
         # for each particle, we are determining how likely the observation is based on the scan
         probabilities = np.empty(len(particles))
