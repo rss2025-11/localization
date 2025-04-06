@@ -282,54 +282,46 @@ class ParticleFilter(Node):
 
     def run_k_means(self, particles):
         """
-        Runs k-means clustering on the particles to find the mean pose estimate. Tries k=1,2,3 and chooses the k with the lowest inertia.
+        Runs k-means clustering on the particles to find the mean pose estimate.
+        Only tries k=1,2 and uses raw data without scaling for efficiency.
 
         args:
-            particles: An Nx3 matrix of the form:
-
-                [x0 y0 theta0]
-                [x1 y1 theta1]
-                [    ...     ]
-
+            particles: An Nx3 matrix of [x y theta]
         returns:
-            mean_x: The mean x coordinate of the particles
-            mean_y: The mean y coordinate of the particles
-            mean_theta: The mean theta coordinate of the particles
+            mean_x, mean_y, mean_theta: Components of the pose estimate
         """
-        angles_2d = np.column_stack((np.cos(particles[:, 2]), np.sin(particles[:, 2])))
-        clustering_data = np.column_stack((particles[:, 0:2], angles_2d))
+        # Pre-compute angles once - more efficient than multiple cos/sin calls
+        cos_theta = np.cos(particles[:, 2])
+        sin_theta = np.sin(particles[:, 2])
 
-        # Standardize the features for fair comparison
-        scaler = StandardScaler()
-        scaled_data = scaler.fit_transform(clustering_data)
-
-        # Try different numbers of clusters
-        best_score = float("inf")
-        best_kmeans = None
-
-        for k in range(1, 4):  # Try k=1,2,3
-            kmeans = KMeans(n_clusters=k)
-            kmeans.fit(scaled_data)
-
-            # Normalize inertia by number of clusters to prevent favoring more clusters
-            normalized_score = kmeans.inertia_ / k
-
-            if normalized_score < best_score:
-                best_score = normalized_score
-                best_kmeans = kmeans
-
-        # Get labels for best clustering
-        labels = best_kmeans.labels_
-
-        largest_cluster = np.argmax(np.bincount(labels))
-
-        # Transform cluster center back to original scale
-        # Reshape the 1D array to a 2D array with shape (1, n_features)
-        center = scaler.inverse_transform(
-            best_kmeans.cluster_centers_[largest_cluster].reshape(1, -1)
+        # Stack data directly without scaling
+        # Using np.hstack is more efficient than multiple column_stack operations
+        clustering_data = np.hstack(
+            (particles[:, 0:2], cos_theta[:, None], sin_theta[:, None])
         )
-        # Since inverse_transform returns a 2D array, we need to flatten it back to 1D
-        center = center.flatten()
+
+        # Try k=1 first (simple mean)
+        kmeans_1 = KMeans(n_clusters=1, n_init=1)  # n_init=1 for speed
+        kmeans_1.fit(clustering_data)
+        score_1 = kmeans_1.inertia_
+
+        # Only try k=2 if we have enough particles and they're spread out
+        if particles.shape[0] > 50 and score_1 > 1.0:  # Threshold can be tuned
+            kmeans_2 = KMeans(n_clusters=2, n_init=1)
+            kmeans_2.fit(clustering_data)
+            score_2 = kmeans_2.inertia_ / 2  # Normalize by k
+
+            if score_2 < score_1:
+                # Use the larger cluster from k=2
+                labels = kmeans_2.labels_
+                largest_cluster = np.argmax(np.bincount(labels))
+                center = kmeans_2.cluster_centers_[largest_cluster]
+            else:
+                center = kmeans_1.cluster_centers_[0]
+        else:
+            center = kmeans_1.cluster_centers_[0]
+
+        # Extract pose components directly
         mean_x = center[0]
         mean_y = center[1]
         mean_theta = np.arctan2(center[3], center[2])
