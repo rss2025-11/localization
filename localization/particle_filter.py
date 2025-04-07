@@ -306,12 +306,11 @@ class ParticleFilter(Node):
             pose.position.y = particle[1]
             pose.position.z = 0.0
 
-            # Convert angle to quaternion
-            q = quaternion_from_euler(0, 0, particle[2])
-            pose.orientation.x = q[0]
-            pose.orientation.y = q[1]
-            pose.orientation.z = q[2]
-            pose.orientation.w = q[3]
+            # Use unit angle
+            pose.orientation.x = 0.0
+            pose.orientation.y = 0.0
+            pose.orientation.z = 0.0
+            pose.orientation.w = 1.0
 
             pose_array.poses.append(pose)
 
