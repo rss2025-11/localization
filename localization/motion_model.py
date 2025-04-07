@@ -12,7 +12,6 @@ class MotionModel:
 
         # noise params
         self.param1 = 0.0
-        self.param2 = 0.005  # this is standard deviation
         self.x_noise = None
         self.y_noise = None
         self.theta_noise = None
@@ -23,6 +22,7 @@ class MotionModel:
         node.declare_parameter("deterministic", False)
         node.declare_parameter("k_vel_trans", 0.01)
         node.declare_parameter("k_vel_rot", 0.02)
+        node.declare_parameter("param2", 0.005)
 
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
@@ -32,6 +32,9 @@ class MotionModel:
         )
         self.k_vel_rot = (
             node.get_parameter("k_vel_rot").get_parameter_value().double_value
+        )
+        self.param2 = (
+            node.get_parameter("param2").get_parameter_value().double_value
         )
         try:
             self.num_particles = (
@@ -56,6 +59,8 @@ class MotionModel:
                 self.k_vel_trans = param.value
             elif param.name == "k_vel_rot":
                 self.k_vel_rot = param.value
+            elif param.name == "param2":
+                self.param2 = param.value
             elif param.name == "deterministic":
                 self.deterministic = param.value
         return rclpy.node.SetParametersResult(successful=True)
