@@ -22,7 +22,7 @@ class MotionModel:
         node.declare_parameter("deterministic", False)
         node.declare_parameter("k_vel_trans", 0.01)
         node.declare_parameter("k_vel_rot", 0.02)
-        node.declare_parameter("param2", 0.005)
+        node.declare_parameter("param2", 0.025)
 
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
