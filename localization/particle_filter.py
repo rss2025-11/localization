@@ -18,8 +18,7 @@ from visualization_msgs.msg import Marker
 from tf_transformations import quaternion_from_euler
 
 from tf2_ros import TransformBroadcaster
-from geometry_msgs.msg import TransformStamped
-from geometry_msgs.msg import PoseArray, Pose
+from geometry_msgs.msg import TransformStamped, Point
 
 
 class ParticleFilter(Node):
@@ -92,7 +91,7 @@ class ParticleFilter(Node):
         self.particles_lock = Lock()
         self.particles = np.zeros((self.num_particles, 3))
 
-        self.viz_particle_pub = self.create_publisher(PoseArray, "/viz/particles", 1)
+        self.viz_particle_pub = self.create_publisher(Marker, "/viz/particles", 1)
         self.viz_pose_pub = self.create_publisher(Marker, "/viz/pose_estimate", 1)
         self.tf_broadcaster = TransformBroadcaster(self)
 
@@ -225,8 +224,10 @@ class ParticleFilter(Node):
 
         # Compute covariance using a fifth of the particles
         sample_size = len(particles_copy) // 5
-        sampled_particles = particles_copy[np.random.choice(len(particles_copy), sample_size, replace=False)]
-        
+        sampled_particles = particles_copy[
+            np.random.choice(len(particles_copy), sample_size, replace=False)
+        ]
+
         cov = np.zeros((6, 6))
         xy_cov = np.cov(sampled_particles[:, 0:2].T)
         cov[0:2, 0:2] = xy_cov
@@ -294,27 +295,31 @@ class ParticleFilter(Node):
         return mean_x, mean_y, mean_theta
 
     def viz_particles(self, particles):
-        """Visualize particles using PoseArray which is much more efficient"""
-        pose_array = PoseArray()
-        pose_array.header.frame_id = "map"
-        pose_array.header.stamp = self.get_clock().now().to_msg()
+        """Visualize particles using MarkerArray of points for better efficiency"""
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.id = 0
+        marker.type = Marker.POINTS
+        marker.action = Marker.ADD
+
+        # Set marker properties
+        marker.scale.x = 0.05  # Point size
+        marker.scale.y = 0.05  # Point size
+        marker.color.a = 1.0  # Opacity
+        marker.color.r = 0.0  # Make points blue for better visibility
+        marker.color.g = 0.0
+        marker.color.b = 1.0
 
         # Only visualize every 5th particle for performance
         for particle in particles[::5]:
-            pose = Pose()
-            pose.position.x = particle[0]
-            pose.position.y = particle[1]
-            pose.position.z = 0.0
+            point = Point()
+            point.x = particle[0]
+            point.y = particle[1]
+            point.z = 0.0
+            marker.points.append(point)
 
-            # Use unit angle
-            pose.orientation.x = 0.0
-            pose.orientation.y = 0.0
-            pose.orientation.z = 0.0
-            pose.orientation.w = 1.0
-
-            pose_array.poses.append(pose)
-
-        self.viz_particle_pub.publish(pose_array)
+        self.viz_particle_pub.publish(marker)
 
     def viz_pose_estimate(self, pose_estimate):
         # Create a marker for the pose estimate
