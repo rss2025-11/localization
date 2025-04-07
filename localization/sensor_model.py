@@ -219,8 +219,11 @@ class SensorModel:
         
         scaled_observation = observation / scale_factor
         clipped_observation = np.clip(scaled_observation, 0, self.z_max)
-        downsampled_observation = clipped_observation[::self.num_beams_per_particle]
-        
+        # downsampled_observation = clipped_observation[::self.num_beams_per_particle]
+        num_beams = self.num_beams_per_particle
+        indices = np.linspace(0, len(clipped_observation) - 1, num_beams).astype(int)
+        downsampled_observation = clipped_observation[indices]
+
         # Get indices for the lookup table - subtract 1 from digitize results since we want 0-based indices
         d_indices = np.digitize(clipped_scans, self.d_vals) - 1
         d_indices = np.clip(d_indices, 0, self.table_width - 1)
