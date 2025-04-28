@@ -23,6 +23,7 @@ class MotionModel:
         node.declare_parameter("k_vel_trans", 0.01)
         node.declare_parameter("k_vel_rot", 0.02)
         node.declare_parameter("param2", 0.025)
+        node.declare_parameter("real_world", 1) # switches odom b/w sim and real word, (1 for sim, -1 for real world)
 
         self.deterministic = (
             node.get_parameter("deterministic").get_parameter_value().bool_value
@@ -35,6 +36,9 @@ class MotionModel:
         )
         self.param2 = (
             node.get_parameter("param2").get_parameter_value().double_value
+        )
+        self.real_world = (
+            node.get_parameter("real_world").get_parameter_value().integer_value
         )
         try:
             self.num_particles = (
@@ -149,7 +153,7 @@ class MotionModel:
         # odometry asumed to be an np.array
 
         # Multiply odometry by -1 for real world
-        odometry = odometry.copy()  # * -1
+        odometry = odometry.copy() * self.real_world
         # transform odom from robot frame to world frame using current pose estimate
 
         x_particles = particles[:, 0]
