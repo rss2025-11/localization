@@ -45,6 +45,7 @@ class SensorModel:
             .double_value
         )
 
+        self.got_map = False
         ####################################
         # Adjust these parameters
         self.alpha_hit = 0.74
@@ -237,6 +238,10 @@ class SensorModel:
         return np.prod(probabilities_table.T, axis=1)
 
     def map_callback(self, map_msg):
+        if self.got_map:
+            return
+        
+        self.got_map = True
         # Convert the map to a numpy array
         self.map = np.array(map_msg.data, np.double) / 100.0
         self.map = np.clip(self.map, 0, 1)

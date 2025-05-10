@@ -1,6 +1,6 @@
 particle_filter:
   ros__parameters:
-    num_particles: 100
+    num_particles: 150
 
     # The number of lidar beams emitted from
     # each particle. This doesn't need to be
